@@ -15,27 +15,29 @@
       addToHistory(color);
       saveHistory();
 
-      // Calculate brightness to decide text color
-      let r = parseInt(color.substr(1, 2), 16);
-      let g = parseInt(color.substr(3, 2), 16);
-      let b = parseInt(color.substr(5, 2), 16);
+      // Adjust text color for readability
+      let rgb = hexToRgb(color);
+      let [r, g, b] = rgb.match(/\d+/g).map(Number);
       let brightness = (r * 299 + g * 587 + b * 114) / 1000;
       document.body.style.color = brightness > 128 ? "black" : "white";
     }
 
-    function copyColor(button) {
-      let color = button.getAttribute("data-color");
-      navigator.clipboard.writeText(color).then(() => {
-        button.textContent = "Copied!";
-        setTimeout(() => button.textContent = "Copy Color", 1000);
-      });
+    function hexToRgb(hex) {
+      let r = parseInt(hex.substr(1,2),16);
+      let g = parseInt(hex.substr(3,2),16);
+      let b = parseInt(hex.substr(5,2),16);
+      return `rgb(${r}, ${g}, ${b})`;
     }
 
     function addToHistory(color, timestamp = null) {
       let history = document.getElementById("history");
+
+      // Prevent consecutive duplicates
       if (history.firstChild && history.firstChild.querySelector(".hex").textContent === color) return;
 
       if (!timestamp) timestamp = new Date().toLocaleString();
+
+      let rgb = hexToRgb(color);
 
       let item = document.createElement("div");
       item.style.display = "flex";
@@ -45,6 +47,7 @@
       item.style.margin = "4px 0";
       item.style.fontFamily = "monospace";
 
+      // Left: swatch + HEX + RGB
       let leftPart = document.createElement("div");
       leftPart.style.display = "flex";
       leftPart.style.alignItems = "center";
@@ -57,15 +60,25 @@
       swatch.style.backgroundColor = color;
       swatch.style.borderRadius = "3px";
 
-      let text = document.createElement("span");
-      text.textContent = color;
-      text.className = "hex";
+      let hexText = document.createElement("span");
+      hexText.textContent = color;
+      hexText.className = "hex";
+      hexText.style.marginRight = "5px";
+
+      let rgbText = document.createElement("span");
+      rgbText.textContent = rgb;
+      rgbText.className = "rgb";
+      rgbText.style.fontSize = "0.9em";
+      rgbText.style.color = "#555";
 
       leftPart.appendChild(swatch);
-      leftPart.appendChild(text);
+      leftPart.appendChild(hexText);
+      leftPart.appendChild(rgbText);
 
+      // Right: timestamp
       let timeText = document.createElement("span");
       timeText.textContent = timestamp;
+      timeText.className = "timestamp";
       timeText.style.fontSize = "0.8em";
       timeText.style.marginLeft = "8px";
 
@@ -78,21 +91,17 @@
       };
 
       history.prepend(item);
-    }
 
-    function clearHistory(event) {
-      event.stopPropagation();
-      document.getElementById("history").innerHTML = "";
-      localStorage.removeItem("colorHistory");
-      localStorage.removeItem("colorTimestamps");
+      // Auto-scroll newest color into view
+      item.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function saveHistory() {
       let colors = [];
       let timestamps = [];
-      document.querySelectorAll("#history .hex").forEach((el, i) => {
+      document.querySelectorAll("#history .hex").forEach(el => {
         colors.push(el.textContent);
-        timestamps.push(el.parentElement.parentElement.querySelector("span:last-child").textContent);
+        timestamps.push(el.parentElement.parentElement.querySelector(".timestamp").textContent);
       });
       localStorage.setItem("colorHistory", JSON.stringify(colors));
       localStorage.setItem("colorTimestamps", JSON.stringify(timestamps));
@@ -110,11 +119,19 @@
       }
     }
 
-    function hexToRgb(hex) {
-      let r = parseInt(hex.substr(1, 2), 16);
-      let g = parseInt(hex.substr(3, 2), 16);
-      let b = parseInt(hex.substr(5, 2), 16);
-      return `rgb(${r}, ${g}, ${b})`;
+    function clearHistory(event) {
+      event.stopPropagation();
+      document.getElementById("history").innerHTML = "";
+      localStorage.removeItem("colorHistory");
+      localStorage.removeItem("colorTimestamps");
+    }
+
+    function copyColor(button) {
+      let color = button.getAttribute("data-color");
+      navigator.clipboard.writeText(color).then(() => {
+        button.textContent = "Copied!";
+        setTimeout(() => button.textContent = "Copy Color", 1000);
+      });
     }
 
     function downloadHistory(event) {
@@ -123,7 +140,7 @@
       let timestamps = [];
       document.querySelectorAll("#history .hex").forEach((el) => {
         colors.push(el.textContent);
-        timestamps.push(el.parentElement.parentElement.querySelector("span:last-child").textContent);
+        timestamps.push(el.parentElement.parentElement.querySelector(".timestamp").textContent);
       });
       if (colors.length === 0) return alert("No colors to download!");
 
@@ -139,25 +156,21 @@
 
     window.onload = () => {
       loadHistory();
-      if (document.querySelector("#history .hex")) {
-        let lastColor = document.querySelector("#history .hex").textContent;
-        changeColor(lastColor);
-      }
+      let lastColorEl = document.querySelector("#history .hex");
+      if (lastColorEl) changeColor(lastColorEl.textContent);
     };
   </script>
 </head>
 <body onclick="changeColor()" style="text-align:center; padding-top:30px; transition: background 0.3s, color 0.3s;">
   <h1>Click anywhere!</h1>
   <p id="colorCode">Current Color: #FFFFFF</p>
-  <button id="copyBtn" data-color="#FFFFFF" onclick="event.stopPropagation(); copyColor(this);">
-    Copy Color
-  </button>
+  <button id="copyBtn" data-color="#FFFFFF" onclick="event.stopPropagation(); copyColor(this);">Copy Color</button>
   <button onclick="clearHistory(event)">Clear History</button>
   <button onclick="downloadHistory(event)">Download History</button>
 
   <h2 style="margin-top:30px;">History</h2>
-  <div id="history" style="max-height:200px; overflow-y:auto; border:1px solid currentColor; padding:5px; margin:0 auto; width:320px; border-radius:5px; text-align:left;">
-    <!-- History with swatches and timestamps will appear here -->
+  <div id="history" style="max-height:250px; overflow-y:auto; border:1px solid currentColor; padding:5px; margin:0 auto; width:400px; border-radius:5px; text-align:left;">
+    <!-- History with swatches, HEX, RGB, timestamp -->
   </div>
 </body>
 </html>
