@@ -1,231 +1,164 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Color Changer</title>
+  <title>Color Changer Ascend Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    html, body { height:100%; margin:0; }
     body {
       text-align: center;
-      padding-top: 30px;
-      transition: background 0.3s, color 0.3s;
-      margin: 0;
+      padding-top: 20px;
       font-family: sans-serif;
+      transition: background 0.3s, color 0.3s;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      min-height: 100vh;
+      cursor: pointer;
+      position: relative;
     }
+    #controls { margin-bottom:10px; }
+    button { margin:5px; padding:5px 10px; font-size:1em; cursor:pointer; }
     #history {
-      max-height: 50vh;
-      overflow-y: auto;
-      border: 1px solid currentColor;
-      padding: 5px;
-      margin: 0 auto;
-      border-radius: 5px;
-      text-align: left;
-      width: 90%;
-      box-sizing: border-box;
+      max-height:50vh;
+      overflow-y:auto;
+      border:1px solid currentColor;
+      padding:5px;
+      margin:10px auto;
+      border-radius:5px;
+      text-align:left;
+      width:90%;
+      box-sizing:border-box;
+      flex-shrink:0;
     }
-    .history-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-      margin: 4px 0;
-      font-family: monospace;
+    .history-item { display:flex; align-items:center; justify-content:space-between; cursor:pointer; margin:4px 0; font-family:monospace; }
+    .history-left { display:flex; align-items:center; }
+    .swatch { width:20px; height:20px; border:1px solid #000; margin-right:8px; border-radius:3px; transition:box-shadow 0.3s; }
+    .hex,.rgb { margin-right:5px; cursor:pointer; transition:text-shadow 0.3s; }
+    .rgb { font-size:0.9em; color:#555; }
+    .timestamp { font-size:0.8em; margin-left:8px; }
+    #colorCode span { cursor:pointer; font-family:monospace; }
+    #counter { margin-top:10px; font-weight:bold; }
+    #ascendBtn { display:none; margin:10px; padding:5px 15px; font-size:1.1em; background:gold; border:none; border-radius:5px; cursor:pointer; }
+    #goldStar { position:absolute; top:10px; left:10px; font-size:2em; display:none; color:gold; }
+    #settingsModal {
+      display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6);
+      justify-content:center; align-items:center;
     }
-    .history-left {
-      display: flex;
-      align-items: center;
+    #settingsContent {
+      background:#fff; padding:20px; border-radius:10px; min-width:200px; text-align:center;
     }
-    .swatch {
-      width: 20px;
-      height: 20px;
-      border: 1px solid #000;
-      margin-right: 8px;
-      border-radius: 3px;
-      transition: box-shadow 0.3s;
+    #celebration {
+      display:none; position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none;
+      z-index:1000;
     }
-    .hex, .rgb {
-      margin-right: 5px;
-      cursor: pointer;
-      transition: text-shadow 0.3s;
+    .confetti {
+      position:absolute; width:10px; height:10px; background:red; animation:fall 2s linear infinite;
     }
-    .rgb {
-      font-size: 0.9em;
-      color: #555;
-    }
-    .timestamp {
-      font-size: 0.8em;
-      margin-left: 8px;
-    }
-    #colorCode span {
-      cursor: pointer;
-      font-family: monospace;
-    }
+    @keyframes fall { 0%{transform:translateY(0)} 100%{transform:translateY(100vh)} }
   </style>
 </head>
-<body onclick="changeColor()">
+<body onclick="bodyClick(event)">
+  <span id="goldStar">★</span>
   <h1>Click anywhere!</h1>
   <p id="colorCode">
     Current Color: 
     <span class="hex" onclick="event.stopPropagation(); copyText(this)">#FFFFFF</span> 
-    (<span class="rgb" onclick="event.stopPropagation(); copyText(this)">rgb(255, 255, 255)</span>)
+    (<span class="rgb" onclick="event.stopPropagation(); copyText(this)">rgb(255,255,255)</span>)
     <span id="copiedMsg" style="margin-left:10px; font-size:0.9em; color:green;"></span>
   </p>
-  <button onclick="clearHistory(event)">Clear History</button>
-  <button onclick="downloadHistory(event)">Download History</button>
 
-  <h2 style="margin-top:30px;">History</h2>
-  <div id="history">
-    <!-- History items appear here -->
+  <div id="controls">
+    <button onclick="toggleSettings(event)">Settings</button>
+    <button id="ascendBtn" onclick="ascend()">Ascend</button>
+    <button onclick="showAllHistory(event)">Show All</button>
   </div>
 
+  <div id="counter"></div>
+  <h2>History</h2>
+  <div id="history"></div>
+
+  <div id="settingsModal" onclick="toggleSettings(event)">
+    <div id="settingsContent" onclick="event.stopPropagation()">
+      <h3>Settings</h3>
+      <button onclick="resetProgress()">Reset Progress</button>
+      <button onclick="downloadHistory(event)">Download History</button>
+      <br><br>
+      <button onclick="toggleSettings(event)">Close</button>
+    </div>
+  </div>
+
+  <div id="celebration"></div>
+
   <script>
-    function hexToRgb(hex) {
-      let r = parseInt(hex.substr(1,2),16);
-      let g = parseInt(hex.substr(3,2),16);
-      let b = parseInt(hex.substr(5,2),16);
-      return `rgb(${r}, ${g}, ${b})`;
+    const MAX_DISPLAY=50, SIMULATED_TOTAL=50;
+    let showAll=false;
+
+    function hexToRgb(hex){let r=parseInt(hex.substr(1,2),16); let g=parseInt(hex.substr(3,2),16); let b=parseInt(hex.substr(5,2),16); return `rgb(${r},${g},${b})`; }
+
+    function bodyClick(e){
+      if(['BUTTON','SPAN','A'].includes(e.target.tagName)||e.target.closest('.history-item')) return;
+      changeColor();
     }
 
-    function changeColor(color=null) {
-      if(!color) {
-        color = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
-      }
-      let rgb = hexToRgb(color);
-      document.body.style.backgroundColor = color;
-      let mainHex = document.querySelector("#colorCode .hex");
-      let mainRgb = document.querySelector("#colorCode .rgb");
-      mainHex.textContent = color;
-      mainRgb.textContent = rgb;
-
+    function changeColor(color=null){
+      if(!color) color='#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');
+      let rgb=hexToRgb(color);
+      document.body.style.backgroundColor=color;
+      document.querySelector("#colorCode .hex").textContent=color;
+      document.querySelector("#colorCode .rgb").textContent=rgb;
       addToHistory(color);
       saveHistory();
-
-      let [r,g,b] = rgb.match(/\d+/g).map(Number);
-      let brightness = (r*299 + g*587 + b*114)/1000;
-      document.body.style.color = brightness > 128 ? "black" : "white";
+      updateCounter();
+      checkAscend();
+      let [r,g,b]=rgb.match(/\d+/g).map(Number);
+      document.body.style.color=(r*299+g*587+b*114)/1000>128?'black':'white';
     }
 
-    function copyText(element){
-      let text = element.textContent;
-      navigator.clipboard.writeText(text).then(()=>{
-        let msg = document.getElementById("copiedMsg");
-        msg.textContent = "Copied!";
+    function copyText(el){navigator.clipboard.writeText(el.textContent).then(()=>{let msg=document.getElementById("copiedMsg"); msg.textContent="Copied!"; setTimeout(()=>msg.textContent="",1000); });}
 
-        // Flash main display if it's the clicked element
-        if(element.parentElement.id === "colorCode") {
-          element.style.textShadow = `0 0 8px ${text}`;
-          setTimeout(()=> element.style.textShadow = '', 500);
-        }
-
-        // Flash swatch in history if exists
-        let historyItems = document.querySelectorAll("#history .history-item");
-        historyItems.forEach(item=>{
-          if(item.querySelector(".hex").textContent === text || item.querySelector(".rgb").textContent === text){
-            let swatch = item.querySelector(".swatch");
-            swatch.style.boxShadow = `0 0 10px 3px ${text}`;
-            setTimeout(()=>{ swatch.style.boxShadow = ''; }, 500);
-          }
-        });
-
-        setTimeout(()=> msg.textContent="", 1000);
-      });
-    }
-
-    function addToHistory(color, timestamp=null) {
-      let history = document.getElementById("history");
-      if(history.firstChild && history.firstChild.querySelector(".hex").textContent === color) return;
-      if(!timestamp) timestamp = new Date().toLocaleString();
-
-      let rgb = hexToRgb(color);
-
-      let item = document.createElement("div");
-      item.className = "history-item";
-
-      let left = document.createElement("div");
-      left.className = "history-left";
-
-      let swatch = document.createElement("span");
-      swatch.className = "swatch";
-      swatch.style.backgroundColor = color;
-
-      let hexText = document.createElement("span");
-      hexText.className = "hex";
-      hexText.textContent = color;
-      hexText.onclick = e => { e.stopPropagation(); copyText(hexText); };
-
-      let rgbText = document.createElement("span");
-      rgbText.className = "rgb";
-      rgbText.textContent = rgb;
-      rgbText.onclick = e => { e.stopPropagation(); copyText(rgbText); };
-
-      left.appendChild(swatch);
-      left.appendChild(hexText);
-      left.appendChild(rgbText);
-
-      let timeText = document.createElement("span");
-      timeText.className = "timestamp";
-      timeText.textContent = timestamp;
-
-      item.appendChild(left);
-      item.appendChild(timeText);
-
-      item.onclick = e => { e.stopPropagation(); changeColor(color); };
-
+    function addToHistory(color,timestamp=null){
+      if(!timestamp) timestamp=new Date().toLocaleString();
+      let history=document.getElementById("history"), rgb=hexToRgb(color);
+      let item=document.createElement("div"); item.className="history-item";
+      let left=document.createElement("div"); left.className="history-left";
+      let swatch=document.createElement("span"); swatch.className="swatch"; swatch.style.backgroundColor=color;
+      let hexText=document.createElement("span"); hexText.className="hex"; hexText.textContent=color; hexText.onclick=e=>{ e.stopPropagation(); copyText(hexText);}
+      let rgbText=document.createElement("span"); rgbText.className="rgb"; rgbText.textContent=rgb; rgbText.onclick=e=>{ e.stopPropagation(); copyText(rgbText);}
+      left.appendChild(swatch); left.appendChild(hexText); left.appendChild(rgbText);
+      let timeText=document.createElement("span"); timeText.className="timestamp"; timeText.textContent=timestamp;
+      item.appendChild(left); item.appendChild(timeText);
+      item.onclick=e=>{ e.stopPropagation(); changeColor(color);}
       history.prepend(item);
-      setTimeout(()=>{ item.scrollIntoView({behavior:"smooth", block:"start"}); }, 50);
+      if(!showAll){ while(history.childNodes.length>MAX_DISPLAY){ history.removeChild(history.lastChild); } }
     }
 
-    function saveHistory() {
-      let colors=[], timestamps=[];
-      document.querySelectorAll("#history .hex").forEach(el=>{
-        colors.push(el.textContent);
-        timestamps.push(el.parentElement.parentElement.querySelector(".timestamp").textContent);
-      });
-      localStorage.setItem("colorHistory", JSON.stringify(colors));
-      localStorage.setItem("colorTimestamps", JSON.stringify(timestamps));
+    function saveHistory(){let colors=[],timestamps=[]; document.querySelectorAll("#history .hex").forEach(el=>{colors.push(el.textContent); timestamps.push(el.parentElement.parentElement.querySelector(".timestamp").textContent);}); localStorage.setItem("colorHistory",JSON.stringify(colors)); localStorage.setItem("colorTimestamps",JSON.stringify(timestamps));}
+
+    function loadHistory(){let savedColors=JSON.parse(localStorage.getItem("colorHistory")||"[]"); let savedTimes=JSON.parse(localStorage.getItem("colorTimestamps")||"[]"); for(let i=savedColors.length-1;i>=0;i--){ addToHistory(savedColors[i],savedTimes[i]); } updateCounter(); checkAscend(); }
+
+    function updateCounter(){let count=JSON.parse(localStorage.getItem("colorHistory")||"[]").length; document.getElementById("counter").textContent=`Colors collected: ${count} / ${SIMULATED_TOTAL}`;}
+
+    function showAllHistory(e){e.stopPropagation(); showAll=true; document.getElementById("history").innerHTML=""; loadHistory();}
+
+    function toggleSettings(e){e.stopPropagation(); let modal=document.getElementById("settingsModal"); modal.style.display=modal.style.display==="flex"?"none":"flex"; modal.style.flexDirection="column"; modal.style.alignItems="center"; modal.style.justifyContent="center";}
+
+    function resetProgress(){
+      if(confirm("Are you sure you want to reset all progress?")){ localStorage.clear(); document.getElementById("history").innerHTML=""; document.getElementById("goldStar").style.display="none"; updateCounter(); document.getElementById("ascendBtn").style.display="none"; }
     }
 
-    function loadHistory() {
-      let savedColors = localStorage.getItem("colorHistory");
-      let savedTimes = localStorage.getItem("colorTimestamps");
-      if(savedColors && savedTimes) {
-        let colors = JSON.parse(savedColors);
-        let timestamps = JSON.parse(savedTimes);
-        for(let i=colors.length-1; i>=0; i--){
-          addToHistory(colors[i], timestamps[i]);
-        }
-      }
+    function downloadHistory(e){e.stopPropagation(); let colors=JSON.parse(localStorage.getItem("colorHistory")||"[]"); if(colors.length===0){alert("No colors to download!");return;} let lines=colors.map(c=>`${c} - ${hexToRgb(c)}`); let blob=new Blob([lines.join("\n")],{type:"text/plain"}); let link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download="color-history.txt"; document.body.appendChild(link); link.click(); document.body.removeChild(link); }
+
+    function checkAscend(){ let count=JSON.parse(localStorage.getItem("colorHistory")||"[]").length; if(count>=SIMULATED_TOTAL){ document.getElementById("ascendBtn").style.display="inline-block"; } }
+
+    function ascend(){
+      if(!confirm("You have collected every color! Are you sure you want to Ascend?")) return;
+      let celebration=document.getElementById("celebration"); celebration.style.display="block"; celebration.innerHTML="";
+      for(let i=0;i<200;i++){ let conf=document.createElement("div"); conf.className="confetti"; conf.style.backgroundColor='#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0'); conf.style.left=Math.random()*100+'vw'; conf.style.animationDuration=(1+Math.random()*2)+'s'; celebration.appendChild(conf);}
+      setTimeout(()=>{ celebration.style.display="none"; document.getElementById("goldStar").style.display="block"; }, 3000);
     }
 
-    function clearHistory(e) {
-      e.stopPropagation();
-      document.getElementById("history").innerHTML="";
-      localStorage.removeItem("colorHistory");
-      localStorage.removeItem("colorTimestamps");
-    }
-
-    function downloadHistory(e){
-      e.stopPropagation();
-      let colors=[], timestamps=[];
-      document.querySelectorAll("#history .hex").forEach(el=>{
-        colors.push(el.textContent);
-        timestamps.push(el.parentElement.parentElement.querySelector(".timestamp").textContent);
-      });
-      if(colors.length===0){alert("No colors to download!"); return;}
-      let lines = colors.map((hex,i)=>`${hex} - ${hexToRgb(hex)} - ${timestamps[i]}`);
-      let blob = new Blob([lines.join("\n")],{type:"text/plain"});
-      let link=document.createElement("a");
-      link.href=URL.createObjectURL(blob);
-      link.download="color-history.txt";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    window.onload = ()=>{
-      loadHistory();
-      let last = document.querySelector("#history .hex");
-      if(last) changeColor(last.textContent);
-    };
+    window.onload=()=>{ loadHistory(); let last=document.querySelector("#history .hex"); if(last) changeColor(last.textContent); else changeColor(); }
   </script>
 </body>
 </html>
