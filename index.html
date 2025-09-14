@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <title>Terminal Loading</title>
 <style>
-html, body {margin:0;padding:0;width:100%;height:100%;background:#000;color:#39ff14;font-family:"Courier New",Courier,monospace;overflow:hidden;}
-#terminal {position:absolute;top:0;left:0;width:100%;padding:2vh 2vw;font-size:calc(10px + 1.2vh);line-height:1.4;z-index:2;white-space:pre-wrap;}
-#fallback {position:absolute;bottom:3vh;width:100%;text-align:center;z-index:2;display:none;font-size:calc(10px + 1vh);}
-a {color:#39ff14;text-decoration:none;font-weight:bold;border-bottom:1px dashed #39ff14;}
-a:hover {color:#00ff00;border-bottom:1px solid #00ff00;}
-.blinking {animation:blink 1s step-start infinite;}
-@keyframes blink {50% {opacity:0;}}
-canvas {position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
+html,body{margin:0;padding:0;width:100%;height:100%;background:#000;color:#39ff14;font-family:"Courier New",Courier,monospace;overflow:hidden;}
+#terminal{position:absolute;top:0;left:0;width:100%;padding:2vh 2vw;font-size:calc(10px + 1.2vh);line-height:1.4;z-index:2;}
+#fallback{position:absolute;bottom:3vh;width:100%;text-align:center;z-index:2;display:none;font-size:calc(10px + 1vh);}
+a{color:#39ff14;text-decoration:none;font-weight:bold;border-bottom:1px dashed #39ff14;}
+a:hover{color:#00ff00;border-bottom:1px solid #00ff00;}
+.blinking{animation:blink 1s step-start infinite;}
+@keyframes blink{50%{opacity:0;}}
+canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
+.line{white-space:pre;}
 </style>
 </head>
 <body>
@@ -19,13 +20,11 @@ canvas {position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
 <div id="terminal"></div>
 <p id="fallback">If you are not redirected automatically, <a href="https://matip47.github.io/home">click here</a>.</p>
 <script>
-const canvas=document.getElementById("matrix");
-const ctx=canvas.getContext("2d");
+const canvas=document.getElementById("matrix"),ctx=canvas.getContext("2d");
 let fontSize,columns,drops=[],letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^%",fallingLetters=[];
 function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;fontSize=Math.max(14,Math.floor(window.innerHeight/40));columns=Math.floor(canvas.width/fontSize);drops=[];for(let i=0;i<columns;i++)drops[i]=Math.random()*canvas.height;}
 resizeCanvas();window.addEventListener('resize',resizeCanvas);
-function drawMatrix(){
-ctx.fillStyle="rgba(0,0,0,0.05)";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.font=fontSize+"px Courier New";
+function drawMatrix(){ctx.fillStyle="rgba(0,0,0,0.05)";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.font=fontSize+"px Courier New";
 for(let i=0;i<drops.length;i++){let c=letters[Math.floor(Math.random()*letters.length)];ctx.fillStyle="#39ff14";ctx.fillText(c,i*fontSize,drops[i]*fontSize);drops[i]++;if(drops[i]*fontSize>canvas.height||Math.random()>0.975)drops[i]=0;}
 for(let i=fallingLetters.length-1;i>=0;i--){let f=fallingLetters[i];ctx.fillStyle="#39ff14";ctx.fillText(f.char,f.x,f.y);f.y+=f.speed;f.x+=Math.sin(f.y/10+f.offset)*2;for(let j=0;j<fallingLetters.length;j++){if(i!==j){let dX=fallingLetters[j].x-f.x,dY=fallingLetters[j].y-f.y;if(Math.abs(dX)<fontSize&&Math.abs(dY)<fontSize){f.x-=dX*0.05;f.y-=dY*0.05;}}}f.speed+=0.05;if(f.y>canvas.height)fallingLetters.splice(i,1);}}
 setInterval(drawMatrix,50);
@@ -45,48 +44,43 @@ const lines=[
 "Redirecting..."
 ];
 
-let currentLine=0;
-let charIndex=0;
+let currentLine=0,charIndex=0,lineElement=null;
 
 function glitchChar(c){if(Math.random()<0.1)return letters[Math.floor(Math.random()*letters.length)];if(Math.random()<0.05)return "_";return c;}
 function flickerLine(line){return line.split('').map(c=>Math.random()<0.1?letters[Math.floor(Math.random()*letters.length)]:c).join('');}
 
 function typeLine(){
-    if(currentLine<lines.length){
-        if(charIndex<lines[currentLine].length){
-            const realChar=lines[currentLine][charIndex];
-            terminal.textContent+=realChar; // ✅ only append real char
-
-            // falling letters from the real character
-            if(Math.random()<0.1)fallingLetters.push({char:realChar,x:Math.random()*canvas.width,y:0,speed:1+Math.random()*2,offset:Math.random()*5});
-
-            charIndex++;
-            setTimeout(typeLine,25+Math.random()*60);
-        } else {
-            let flickerCount=Math.floor(Math.random()*4);
-            let flickerIndex=0;
-            function flicker(){
-                if(flickerIndex<flickerCount){
-                    // Temporarily show flicker using a temp span (not permanent)
-                    const temp=terminal.textContent.slice(0,-lines[currentLine].length)+flickerLine(lines[currentLine])+"\n";
-                    terminal.textContent=temp;
-                    flickerIndex++;
-                    setTimeout(flicker,40+Math.random()*50);
-                } else {
-                    // ✅ restore clean line
-                    terminal.textContent=terminal.textContent.slice(0,-lines[currentLine].length)+lines[currentLine]+"\n";
-                    currentLine++;
-                    charIndex=0;
-                    if(currentLine<lines.length)setTimeout(typeLine,150+Math.random()*150);
-                    else{
-                        const cursor=document.createElement("span");cursor.textContent="_";cursor.classList.add("blinking");terminal.appendChild(cursor);
-                        fallback.style.display="block";
-                        setTimeout(()=>{window.location.href="https://matip47.github.io/home";},1000);
-                    }
-                }
+    if(currentLine>=lines.length){ // finished
+        const cursor=document.createElement("span");cursor.textContent="_";cursor.classList.add("blinking");lineElement.appendChild(cursor);
+        fallback.style.display="block";
+        setTimeout(()=>{window.location.href="https://matip47.github.io/home";},1000);
+        return;
+    }
+    if(!lineElement){
+        lineElement=document.createElement("div");
+        lineElement.className="line";
+        terminal.appendChild(lineElement);
+    }
+    if(charIndex<lines[currentLine].length){
+        const realChar=lines[currentLine][charIndex];
+        lineElement.textContent+=realChar; // ✅ always real char
+        if(Math.random()<0.1)fallingLetters.push({char:realChar,x:Math.random()*canvas.width,y:0,speed:1+Math.random()*2,offset:Math.random()*5});
+        charIndex++;
+        setTimeout(typeLine,25+Math.random()*60);
+    } else {
+        let flickerCount=Math.floor(Math.random()*4),flickerIndex=0;
+        function flicker(){
+            if(flickerIndex<flickerCount){
+                lineElement.textContent=flickerLine(lines[currentLine]);
+                flickerIndex++;
+                setTimeout(flicker,40+Math.random()*50);
+            } else {
+                lineElement.textContent=lines[currentLine]; // ✅ restore clean line
+                currentLine++;charIndex=0;lineElement=null;
+                setTimeout(typeLine,150+Math.random()*150);
             }
-            flicker();
         }
+        flicker();
     }
 }
 typeLine();
