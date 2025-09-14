@@ -11,8 +11,8 @@ a{color:#39ff14;text-decoration:none;font-weight:bold;border-bottom:1px dashed #
 a:hover{color:#00ff00;border-bottom:1px solid #00ff00;}
 .blinking{animation:blink 1s step-start infinite;}
 @keyframes blink{50%{opacity:0;}}
-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;transition:filter 0.1s, opacity 1s;}
-.line{position:relative;display:inline-block;white-space:pre;margin:0.1em 0;padding:0.05em 0.15em;overflow:hidden;transition:transform 1s linear, opacity 1s linear;}
+canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
+.line{position:relative;display:inline-block;white-space:pre;margin:0.1em 0;padding:0.05em 0.15em;overflow:hidden;}
 .line-bg{position:absolute;top:0;left:0;height:100%;background:rgba(0,0,0,0.7);width:0;transition:width 0.05s linear;z-index:-1;}
 </style>
 </head>
@@ -23,10 +23,7 @@ canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;transition:f
 <script>
 // MATRIX BACKGROUND
 const canvas=document.getElementById("matrix"),ctx=canvas.getContext("2d");
-let fontSize,columns,drops=[],letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^%",fallingLetters=[],sparks=[];
-let matrixGlow = 0; // glow intensity for matrix letters
-let pulseAmount = 1; // canvas brightness pulse amount
-
+let fontSize,columns,drops=[],letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^%",fallingLetters=[];
 function resizeCanvas(){
     canvas.width=window.innerWidth;
     canvas.height=window.innerHeight;
@@ -42,18 +39,13 @@ function drawMatrix(){
     ctx.fillStyle="rgba(0,0,0,0.05)";
     ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.font=fontSize+"px Courier New";
-
     for(let i=0;i<drops.length;i++){
         let c=letters[Math.floor(Math.random()*letters.length)];
-        const glowAlpha = Math.min(1, 0.4 + matrixGlow * 0.6);
-        ctx.fillStyle=`rgba(57,255,20,${glowAlpha})`;
-        ctx.shadowColor = `rgba(57,255,20,${matrixGlow})`;
-        ctx.shadowBlur = 20 * matrixGlow;
+        ctx.fillStyle="#39ff14";
         ctx.fillText(c,i*fontSize,drops[i]*fontSize);
         drops[i]++;
         if(drops[i]*fontSize>canvas.height||Math.random()>0.975)drops[i]=0;
     }
-    ctx.shadowBlur = 0;
 
     // falling letters
     for(let i=fallingLetters.length-1;i>=0;i--){
@@ -63,22 +55,6 @@ function drawMatrix(){
         f.y+=f.speed;
         f.x+=Math.sin(f.y/10+f.offset)*2;
         if(f.y>canvas.height)fallingLetters.splice(i,1);
-    }
-
-    // spark effects with trails
-    for(let i=sparks.length-1;i>=0;i--){
-        let s = sparks[i];
-        s.trail.push({x:s.x,y:s.y,alpha:s.alpha,size:s.size});
-        if(s.trail.length>5) s.trail.shift();
-        for(let t of s.trail){
-            const flicker = 0.5 + Math.random()*0.5;
-            ctx.fillStyle=`rgba(57,255,20,${t.alpha*flicker})`;
-            ctx.fillRect(t.x,t.y,t.size,t.size);
-        }
-        s.x += s.vx;
-        s.y += s.vy;
-        s.alpha -= 0.05;
-        if(s.alpha <= 0) sparks.splice(i,1);
     }
 }
 setInterval(drawMatrix,50);
@@ -104,7 +80,6 @@ const lines=[
 ];
 
 let currentLine=0,charIndex=0,lineElement=null,lineBg=null;
-
 function glitchChar(c){
     if(Math.random()<0.1)return letters[Math.floor(Math.random()*letters.length)];
     if(Math.random()<0.05)return "_";
@@ -119,7 +94,7 @@ function typeLine(){
         cursor.textContent="_";
         cursor.classList.add("blinking");
         lastLine.appendChild(cursor);
-        vortexSwirl();
+        setTimeout(()=>{window.location.href="https://matip47.github.io/home";},1000);
         return;
     }
 
@@ -145,8 +120,12 @@ function typeLine(){
             offset:Math.random()*5
         });
 
+        // last line types slower for dramatic effect
+        const isLastLine = (currentLine === lines.length - 1);
+        const delay = isLastLine ? (70 + Math.random()*80) : (25 + Math.random()*60);
+
         charIndex++;
-        setTimeout(typeLine, 25 + Math.random()*60);
+        setTimeout(typeLine, delay);
     } else {
         lineElement.textContent = lines[currentLine];
         lineBg.style.width="100%";
@@ -156,56 +135,6 @@ function typeLine(){
         lineBg=null;
         setTimeout(typeLine, 150 + Math.random()*150);
     }
-}
-
-// VORTEX SWIRL + SCREEN PULSE
-function vortexSwirl(){
-    const linesArr = Array.from(terminal.children);
-    const startTime = Date.now();
-    const duration = 1000;
-    let pulseDirection = 1;
-
-    const interval = setInterval(()=>{
-        let elapsed = Date.now() - startTime;
-        let progress = Math.min(elapsed/duration,1);
-        matrixGlow = progress;
-
-        // screen pulse effect: oscillate brightness
-        pulseAmount += 0.1 * pulseDirection;
-        if(pulseAmount > 1.3) pulseDirection = -1;
-        if(pulseAmount < 0.8) pulseDirection = 1;
-        canvas.style.filter = `brightness(${pulseAmount})`;
-
-        linesArr.forEach((line,i)=>{
-            const angle = progress*5 + i;
-            const radius = Math.max(0, (linesArr.length-i)*50*(1-progress));
-            line.style.transform = `translate(${Math.cos(angle)*radius}px, ${Math.sin(angle)*radius}px) rotate(${angle*20}deg) scale(${1-progress})`;
-            line.style.opacity = 1-progress;
-            line.style.textShadow = `0 0 ${20*progress}px #39ff14, 0 0 ${40*progress}px #39ff14, 0 0 ${60*progress}px #39ff14`;
-
-            const rect = line.getBoundingClientRect();
-            const cx = rect.left + rect.width/2;
-            const cy = rect.top + rect.height/2;
-            for(let s=0;s<3;s++){
-                sparks.push({
-                    x: cx,
-                    y: cy,
-                    vx: (Math.random()-0.5)*4,
-                    vy: (Math.random()-0.5)*4,
-                    alpha:1,
-                    size:1+Math.random()*2,
-                    trail:[]
-                });
-            }
-        });
-
-        if(progress>=1){
-            clearInterval(interval);
-            matrixGlow = 0;
-            canvas.style.filter = "brightness(1)";
-            window.location.href="https://matip47.github.io/home";
-        }
-    },16);
 }
 
 typeLine();
