@@ -171,17 +171,19 @@ function typeLine(){
             const flickerCount=Math.floor(Math.random()*4);
             let flickerIndex=0;
             function flicker(){
-                if(flickerIndex<flickerCount){
-                    terminal.textContent = terminal.textContent.slice(0,-lines[currentLine].length) + flickerLine(lines[currentLine]) + "\n";
-                    flickerIndex++;
-                    setTimeout(flicker,40+Math.random()*50);
-                } else {
-                    terminal.textContent = terminal.textContent.slice(0,-lines[currentLine].length) + lines[currentLine] + "\n";
-                    currentLine++;
-                    charIndex=0;
-                    setTimeout(typeLine,150+Math.random()*150);
-                }
-            }
+    if(flickerIndex < flickerCount){
+        terminal.textContent = terminal.textContent.slice(0, -lines[currentLine].length) + flickerLine(lines[currentLine]) + "\n";
+        flickerIndex++;
+        setTimeout(flicker, 40 + Math.random() * 50);
+    } else {
+        // ✅ FIX: fully reset the line to the correct, clean version before moving on
+        terminal.textContent = terminal.textContent.slice(0, -lines[currentLine].length) + lines[currentLine] + "\n";
+        currentLine++;
+        charIndex = 0;
+        setTimeout(typeLine, 150 + Math.random() * 150);
+    }
+}
+
             flicker();
         }
     } else {
