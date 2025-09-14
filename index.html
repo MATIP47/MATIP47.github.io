@@ -20,6 +20,7 @@ canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
 <div id="terminal"></div>
 <p id="fallback">If you are not redirected automatically, <a href="https://matip47.github.io/home">click here</a>.</p>
 <script>
+// MATRIX BACKGROUND
 const canvas=document.getElementById("matrix"),ctx=canvas.getContext("2d");
 let fontSize,columns,drops=[],letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^%",fallingLetters=[];
 function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;fontSize=Math.max(14,Math.floor(window.innerHeight/40));columns=Math.floor(canvas.width/fontSize);drops=[];for(let i=0;i<columns;i++)drops[i]=Math.random()*canvas.height;}
@@ -29,10 +30,10 @@ for(let i=0;i<drops.length;i++){let c=letters[Math.floor(Math.random()*letters.l
 for(let i=fallingLetters.length-1;i>=0;i--){let f=fallingLetters[i];ctx.fillStyle="#39ff14";ctx.fillText(f.char,f.x,f.y);f.y+=f.speed;f.x+=Math.sin(f.y/10+f.offset)*2;for(let j=0;j<fallingLetters.length;j++){if(i!==j){let dX=fallingLetters[j].x-f.x,dY=fallingLetters[j].y-f.y;if(Math.abs(dX)<fontSize&&Math.abs(dY)<fontSize){f.x-=dX*0.05;f.y-=dY*0.05;}}}f.speed+=0.05;if(f.y>canvas.height)fallingLetters.splice(i,1);}}
 setInterval(drawMatrix,50);
 
-// Title animation
+// TITLE ANIMATION
 const titleBase="Terminal Loading";let dotCount=1;setInterval(()=>{document.title=titleBase+".".repeat(dotCount);dotCount++;if(dotCount>3)dotCount=1;},500);
 
-// Terminal typing
+// TERMINAL TYPING
 const terminal=document.getElementById("terminal");
 const fallback=document.getElementById("fallback");
 const lines=[
@@ -46,43 +47,42 @@ const lines=[
 
 let currentLine=0,charIndex=0,lineElement=null;
 
+// Glitch function for temporary effect
 function glitchChar(c){if(Math.random()<0.1)return letters[Math.floor(Math.random()*letters.length)];if(Math.random()<0.05)return "_";return c;}
 function flickerLine(line){return line.split('').map(c=>Math.random()<0.1?letters[Math.floor(Math.random()*letters.length)]:c).join('');}
 
 function typeLine(){
-    if(currentLine>=lines.length){ // finished
+    if(currentLine>=lines.length){ 
         const cursor=document.createElement("span");cursor.textContent="_";cursor.classList.add("blinking");lineElement.appendChild(cursor);
         fallback.style.display="block";
         setTimeout(()=>{window.location.href="https://matip47.github.io/home";},1000);
         return;
     }
+
     if(!lineElement){
         lineElement=document.createElement("div");
         lineElement.className="line";
         terminal.appendChild(lineElement);
     }
+
     if(charIndex<lines[currentLine].length){
         const realChar=lines[currentLine][charIndex];
-        lineElement.textContent+=realChar; // ✅ always real char
+        const displayChar=glitchChar(realChar); // temporary glitch
+        lineElement.textContent+=displayChar;
+
         if(Math.random()<0.1)fallingLetters.push({char:realChar,x:Math.random()*canvas.width,y:0,speed:1+Math.random()*2,offset:Math.random()*5});
         charIndex++;
         setTimeout(typeLine,25+Math.random()*60);
     } else {
-        let flickerCount=Math.floor(Math.random()*4),flickerIndex=0;
-        function flicker(){
-            if(flickerIndex<flickerCount){
-                lineElement.textContent=flickerLine(lines[currentLine]);
-                flickerIndex++;
-                setTimeout(flicker,40+Math.random()*50);
-            } else {
-                lineElement.textContent=lines[currentLine]; // ✅ restore clean line
-                currentLine++;charIndex=0;lineElement=null;
-                setTimeout(typeLine,150+Math.random()*150);
-            }
-        }
-        flicker();
+        // Instantly rewrite clean line after typing
+        lineElement.textContent=lines[currentLine];
+        currentLine++;
+        charIndex=0;
+        lineElement=null;
+        setTimeout(typeLine,150+Math.random()*150);
     }
 }
+
 typeLine();
 </script>
 </body>
