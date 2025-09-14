@@ -19,169 +19,161 @@ canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated}
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d', {alpha:false});
-let radarScale = 8;
-
 function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
 addEventListener('resize', resize);
 resize();
 
-const MAX_MAZE_SIZE = 75;
-const RENDER_DEPTH = 65;
-const FOV = 60 * Math.PI/180;
-const playerRadius = 0.12; 
-const baseSpeed = 1.5;
-
-let maze = [];
-let flickerLights = [];
-let enemies = [];
-let invincible = false;
-
-// Your maze generation code goes here (unchanged)...
-
-// Player and movement setup
-let player={x:0,y:0,angle:0,speed:baseSpeed,bobPhase:0,tilt:0};
-[player.x,player.y]=[Math.floor(MAX_MAZE_SIZE/2)+0.5,Math.floor(MAX_MAZE_SIZE/2)+0.5];
-
+const CHUNK=175;
+const FOV = 60*Math.PI/180;
+const playerRadius=0.12;
+const baseSpeed=1.5;
+let player={x:CHUNK/2+0.5,y:CHUNK/2+0.5,angle:0,speed:baseSpeed,bobPhase:0,tilt:0};
 const keys={};
 addEventListener('keydown',e=>keys[e.code]=true);
 addEventListener('keyup',e=>keys[e.code]=false);
 
-addEventListener('keydown',e=>{
-  if (e.code==='Minus'||e.code==='NumpadSubtract'){ radarScale=Math.max(2,radarScale-1); e.preventDefault();}
-  if (e.code==='Equal'||e.code==='NumpadAdd'){ radarScale=Math.min(20,radarScale+1); e.preventDefault();}
-});
-
-let sprintMax=5,sprintCurrent=sprintMax,isRegenerating=false;
-
-// Footstep sound setup
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-const footstepAudio = new Audio('sounds/footsteps.mp3');
-footstepAudio.preload='auto'; footstepAudio.load();
-let lastFootstepTime=0;
-function playFootstep(){
-  if(audioCtx.state==='suspended') audioCtx.resume();
-  footstepAudio.playbackRate=0.9+Math.random()*0.3;
-  footstepAudio.volume=0.2+Math.random()*0.3;
-  footstepAudio.currentTime=0;
-  footstepAudio.play();
-}
-
-// Enemy class
-class Enemy {
-  constructor(x,y){
-    this.x=x; this.y=y; this.angle=0; this.speed=1.2; this.noclip=false; this.alpha=0;
+let maze = new Array(CHUNK*CHUNK).fill(1);
+function index(x,y){return y*CHUNK+x;}
+function generateMaze(){
+  for(let y=1;y<CHUNK-1;y++){
+    for(let x=1;x<CHUNK-1;x++){
+      maze[index(x,y)]=Math.random()<0.15?1:0;
+    }
   }
-  update(dt,radarLineAngle){
-    const dx=player.x-this.x, dy=player.y-this.y;
+  for(let i=0;i<CHUNK;i++){maze[index(i,0)]=maze[index(i,CHUNK-1)]=1; maze[index(0,i)]=maze[index(CHUNK-1,i)]=1;}
+}
+generateMaze();
+function getCell(x,y){x=Math.floor(x);y=Math.floor(y);if(x<0||y<0||x>=CHUNK||y>=CHUNK)return 1;return maze[index(x,y)];}
+
+class Enemy{
+  constructor(x,y){this.x=x;this.y=y;this.angle=0;this.speed=1.2;this.alpha=0;}
+  update(dt,radarAngle){
+    const dx=player.x-this.x,dy=player.y-this.y;
     this.angle=Math.atan2(dy,dx);
     const moveX=Math.cos(this.angle)*this.speed*dt;
     const moveY=Math.sin(this.angle)*this.speed*dt;
-    if(!this.noclip){ if(getCell(Math.floor(this.x+moveX),Math.floor(this.y+moveY))===0){ this.x+=moveX; this.y+=moveY; } }
-    else{ this.x+=moveX; this.y+=moveY; if(getCell(Math.floor(this.x),Math.floor(this.y))===0) this.noclip=false; }
-    const dist=Math.sqrt(dx*dx+dy*dy);
-    if(!invincible && dist<0.5){ player.x=Math.floor(MAX_MAZE_SIZE/2)+0.5; player.y=Math.floor(MAX_MAZE_SIZE/2)+0.5; }
-    const angleToEnemy=Math.atan2(this.y-player.y,this.x-player.x);
-    const radarDiff=Math.atan2(Math.sin(radarLineAngle-angleToEnemy),Math.cos(radarLineAngle-angleToEnemy));
-    if(Math.abs(radarDiff)<0.03){ this.alpha=1; }
-    else if(this.alpha>0){ this.alpha-=dt*0.15; if(this.alpha<0)this.alpha=0; }
+    if(getCell(this.x+moveX,this.y+moveY)===0){this.x+=moveX;this.y+=moveY;}
+    const dist=Math.hypot(dx,dy);
+    if(dist<0.5&&!invincible){player.x=CHUNK/2+0.5;player.y=CHUNK/2+0.5;}
+    const aToEnemy=Math.atan2(this.y-player.y,this.x-player.x);
+    const diff=Math.atan2(Math.sin(radarAngle-aToEnemy),Math.cos(radarAngle-aToEnemy));
+    if(Math.abs(diff)<0.03)this.alpha=1; else if(this.alpha>0){this.alpha-=dt*0.15;if(this.alpha<0)this.alpha=0;}
   }
-  drawRadar(cx,cy,radarRadius){
-    if(this.alpha<=0) return;
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-player.angle-Math.PI/2);
-    const px=(this.x-player.x)*radarScale; const py=(this.y-player.y)*radarScale;
-    if(Math.sqrt(px*px+py*py)<radarRadius-2){ ctx.globalAlpha=this.alpha; ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;}
+  drawRadar(cx,cy,radius){
+    if(this.alpha<=0)return;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(-player.angle-Math.PI/2);
+    const px=(this.x-player.x)*8,py=(this.y-player.y)*8;
+    if(Math.hypot(px,py)<radius-2){ctx.globalAlpha=this.alpha;ctx.fillStyle='red';ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}
     ctx.restore();
   }
   draw3D(){
-    if(this.alpha<=0) return;
-    const w=5,h=5;
-    const screenX=(this.x-player.x)*10+canvas.width/2;
-    const screenY=(this.y-player.y)*10+canvas.height/2;
-    ctx.globalAlpha=this.alpha; ctx.fillStyle='red'; ctx.fillRect(screenX-w/2, screenY-h/2, w, h); ctx.globalAlpha=1;
+    if(this.alpha<=0)return;
+    const dx = this.x - player.x;
+    const dy = this.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if(dist < 0.5) return;
+    let angleToEnemy = Math.atan2(dy, dx) - player.angle;
+    while(angleToEnemy > Math.PI) angleToEnemy -= 2*Math.PI;
+    while(angleToEnemy < -Math.PI) angleToEnemy += 2*Math.PI;
+    if(Math.abs(angleToEnemy) > FOV/2) return;
+    const wallHeight = canvas.height*0.5 / dist;
+    const projectedWidth = wallHeight * 0.5;
+    const screenX = canvas.width/2 + Math.tan(angleToEnemy)*canvas.width/(2*Math.tan(FOV/2)) - projectedWidth/2;
+    const screenY = canvas.height/2 - wallHeight/2;
+    ctx.globalAlpha = this.alpha;
+    ctx.fillStyle = 'red';
+    ctx.fillRect(screenX, screenY, projectedWidth, wallHeight);
+    ctx.globalAlpha = 1;
   }
 }
+let enemies=[];
+let invincible=false;
+setTimeout(()=>{enemies.push(new Enemy(player.x+2,player.y+2));},60000);
 
 function drawRadar(){
-  const baseRadarRadius=120;
-  const radarRadius=baseRadarRadius*1.5;
-  const cx=canvas.width - radarRadius - 0.02 * canvas.width;
-  const cy=radarRadius + 0.02 * canvas.height;
-
-  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,radarRadius,0,Math.PI*2); ctx.clip();
-  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-player.angle-Math.PI/2);
-
-  // Draw minimap walls as lines
-  ctx.save(); ctx.scale(radarScale,radarScale);
-  const maxCells=(radarRadius-2)/radarScale+1;
-  const playerCellX=player.x, playerCellY=player.y;
-  ctx.strokeStyle='#999'; ctx.lineWidth=0.5;
-  for(let gx=Math.floor(playerCellX-maxCells);gx<=Math.ceil(playerCellX+maxCells);gx++){
-    for(let gy=Math.floor(playerCellY-maxCells);gy<=Math.ceil(playerCellY+maxCells);gy++){
-      if(getCell(gx,gy)===1){
-        const px=gx-playerCellX, py=gy-playerCellY;
-        if(Math.sqrt(px*px+py*py)<radarRadius-2){ ctx.strokeRect(px,py,1,1); }
-      }
-    }
-  }
-  ctx.restore(); ctx.restore();
-
-  // Radar lines
-  const radarLineColor='#333';
-  const innerRadii=[radarRadius*0.66,radarRadius*0.33,radarRadius*0.15];
-  for(const r of innerRadii){ ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.strokeStyle=radarLineColor; ctx.lineWidth=1; ctx.stroke(); }
+  const baseRadius=120;const radarRadius=baseRadius*1.5;
+  const cx=canvas.width-radarRadius-0.02*canvas.width;
+  const cy=radarRadius+0.02*canvas.height;
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,radarRadius,0,Math.PI*2);ctx.clip();
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(-player.angle-Math.PI/2);
+  ctx.save();ctx.scale(8,8);
+  const maxCells=(radarRadius-2)/8+1;const px=player.x,py=player.y;
+  ctx.strokeStyle='#999';ctx.lineWidth=0.5;
+  for(let gx=Math.floor(px-maxCells);gx<=Math.ceil(px+maxCells);gx++){
+    for(let gy=Math.floor(py-maxCells);gy<=Math.ceil(py+maxCells);gy++){
+      if(getCell(gx,gy)===1){const dx=gx-px,dy=gy-py;if(Math.hypot(dx,dy)<radarRadius-2){ctx.strokeRect(dx,dy,1,1);}}}
+  ctx.restore();ctx.restore();
   const angles=[45,135,225,315].map(a=>a*Math.PI/180);
-  for(const angle of angles){
-    const startX=cx+innerRadii[2]*Math.cos(angle), startY=cy+innerRadii[2]*Math.sin(angle);
-    const endX=cx+radarRadius*Math.cos(angle), endY=cy+radarRadius*Math.sin(angle);
-    ctx.beginPath(); ctx.moveTo(startX,startY); ctx.lineTo(endX,endY); ctx.strokeStyle=radarLineColor; ctx.lineWidth=1; ctx.stroke();
-  }
-
-  const time=performance.now()*0.002;
-  const lineX=Math.cos(time)*radarRadius, lineY=Math.sin(time)*radarRadius;
-  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+lineX,cy+lineY); ctx.strokeStyle='#333'; ctx.lineWidth=1; ctx.stroke();
-
-  // Draw enemies on radar
-  for(const e of enemies) e.drawRadar(cx,cy,radarRadius);
-
-  ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+  const inner=[radarRadius*0.66,radarRadius*0.33,radarRadius*0.15];
+  for(const r of inner){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();}
+  for(const a of angles){ctx.beginPath();ctx.moveTo(cx+inner[2]*Math.cos(a),cy+inner[2]*Math.sin(a));ctx.lineTo(cx+radarRadius*Math.cos(a),cy+radarRadius*Math.sin(a));ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();}
+  const t=performance.now()*0.002;ctx.beginPath();ctx.moveTo(cx,cy);
+  ctx.lineTo(cx+Math.cos(t)*radarRadius,cy+Math.sin(t)*radarRadius);ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
+  for(const e of enemies)e.drawRadar(cx,cy,radarRadius);
+  ctx.fillStyle='red';ctx.beginPath();ctx.arc(cx,cy,6,0,Math.PI*2);ctx.fill();
   ctx.restore();
 }
 
+function castRay(rayAngle){
+  let dist=0;const step=0.02;
+  let hit=false;
+  let side=0;
+  let hitX=0,hitY=0;
+  while(!hit && dist<20){
+    dist+=step;
+    const testX = player.x + Math.cos(rayAngle)*dist;
+    const testY = player.y + Math.sin(rayAngle)*dist;
+    if(getCell(testX,testY)===1){
+      hit=true;
+      hitX = testX;
+      hitY = testY;
+    }
+  }
+  if(!hit) return {dist:20,side:0};
+  const blockX = Math.floor(hitX);
+  const blockY = Math.floor(hitY);
+  const deltaX = hitX - blockX;
+  const deltaY = hitY - blockY;
+  if(deltaX<0.01 || deltaX>0.99) side=0; else side=1;
+  return {dist,side};
+}
+
 function render(){
-  ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  const w=canvas.width,h=canvas.height;
-  const bobOffset=Math.sin(player.bobPhase)*1.5;
+  ctx.fillStyle='rgb(30,30,40)';
+  ctx.fillRect(0,0,canvas.width,canvas.height/2);
+  ctx.fillStyle='rgb(150,100,50)';
+  ctx.fillRect(0,canvas.height/2,canvas.width,canvas.height/2);
 
-  // Floor and ceiling
-  ctx.fillStyle='rgb(30,30,40)'; ctx.fillRect(0,0,w,h/2);
-  ctx.fillStyle='rgb(150,100,50)'; ctx.fillRect(0,h/2,w,h/2);
+  const numRays = canvas.width;
+  const halfHeight = canvas.height/2;
+  for(let i=0;i<numRays;i++){
+    const rayScreenPos = (i / numRays) - 0.5;
+    const rayAngle = player.angle + rayScreenPos * FOV;
+    let {dist,side} = castRay(rayAngle);
+    dist *= Math.cos(rayAngle - player.angle);
+    const wallHeight = Math.min(canvas.height, (canvas.height*1.3) / dist);
+    const wallTop = halfHeight - wallHeight/2;
+    const wallBottom = wallTop + wallHeight;
+    const baseColor=side===0?180:160;
+    ctx.fillStyle=`rgb(${baseColor+Math.random()*5|0},${baseColor-20+Math.random()*5|0},80)`;
+    ctx.fillRect(i,wallTop,1,wallHeight);
+  }
 
-  // Draw walls here...
-
-  // Draw enemies in 3D
-  for(const e of enemies) e.draw3D();
-
+  for(const e of enemies)e.draw3D();
   drawRadar();
-
-  // Draw stamina bar
-  const barWidth=w*0.4,barHeight=14,barX=(w-barWidth)/2,barY=h-0.03*h-barHeight;
-  ctx.lineWidth=2; ctx.strokeStyle='#0a0'; ctx.fillStyle='#222'; ctx.fillRect(barX,barY,barWidth,barHeight); ctx.strokeRect(barX,barY,barWidth,barHeight);
-  const fillWidth=(sprintCurrent/sprintMax)*barWidth;
-  ctx.fillStyle=isRegenerating?'#a00':'#0a0'; ctx.fillRect(barX,barY,fillWidth,barHeight);
 }
 
 let last=performance.now();
 function loop(){
-  const now=performance.now(), dt=(now-last)/1000; last=now;
+  const now=performance.now();
+  const dt=(now-last)/1000; last=now;
   const forward=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
   const strafe=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
   const dx=(forward*Math.cos(player.angle)-strafe*Math.sin(player.angle))*player.speed;
   const dy=(forward*Math.sin(player.angle)+strafe*Math.cos(player.angle))*player.speed;
-  movePlayer(dx,dy,dt);
+  player.x+=dx*dt;player.y+=dy*dt;player.bobPhase+=dt*6;
 
-  // Update enemies
-  const radarLineAngle=performance.now()*0.002;
-  for(const e of enemies) e.update(dt,radarLineAngle);
+  for(const e of enemies)e.update(dt,player.angle);
 
   render();
   requestAnimationFrame(loop);
@@ -189,8 +181,8 @@ function loop(){
 requestAnimationFrame(loop);
 
 canvas.addEventListener('click',()=>canvas.requestPointerLock());
-addEventListener('mousemove',e=>{ if(document.pointerLockElement===canvas){ player.angle+=e.movementX*0.0022; }});
-document.getElementById('fullscreenBtn').addEventListener('click',()=>{ if(!document.fullscreenElement)document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas){player.angle+=e.movementX*0.0022;}});
+document.getElementById('fullscreenBtn').addEventListener('click',()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();});
 </script>
 </body>
 </html>
