@@ -1,184 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>user@homebrew:</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+html, body {
+    height: 100%;
+    margin: 0;
+    background-color: #000;
+    color: #39FF14;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.2;
+    position: relative;
+}
+
+.cursor {
+    display: inline-block;
+    width: 10px;
+    height: 1em;
+    background-color: #39FF14;
+    animation: blink 1s step-start infinite;
+}
+
+@keyframes blink { 50% { background-color: transparent; } }
+
+.input-line {
+    display: flex;
+    position: relative;
+}
+
+.prompt {
+    margin-right: 5px;
+}
+
+input {
+    background: none;
+    border: none;
+    color: #39FF14;
+    outline: none;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    flex: 1;
+}
+
+/* Dropdown menu */
+.dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #000;
+    border: 1px solid #39FF14;
+    margin-top: 2px;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+}
+
+.dropdown-item {
+    padding: 4px 8px;
+    cursor: pointer;
+    color: #39FF14;
+    background: #000;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+}
+
+.dropdown-item:hover,
+.dropdown-item.active {
+    background: #39FF14;
+    color: #000;
+}
+</style>
+</head>
+<body>
+<div class="terminal" id="terminal">
+    <p>Welcome to M-HUB Terminal!</p>
+    <p>Type 'help' to see available commands.</p>
+
+    <div class="input-line" id="currentLine">
+        <span class="prompt">user@homebrew:~$</span>
+        <input type="text" id="commandInput" autofocus />
+        <span class="cursor"></span>
+        <div class="dropdown" id="dropdown"></div>
+    </div>
+</div>
+
 <script>
-    const terminal = document.getElementById("terminal");
-    let dropdown = document.getElementById("dropdown");
-    let input = document.getElementById("commandInput");
+const terminal = document.getElementById("terminal");
+let dropdown = document.getElementById("dropdown");
+let input = document.getElementById("commandInput");
 
-    const availableCommands = ["help", "about", "clear"];
-    let commandHistory = [];
-    let historyIndex = -1;
-    let dropdownIndex = -1;
-    let currentMatches = [];
+const availableCommands = ["help", "about", "clear", "/game"];
+const gameSubCommands = { maze: "https://matip47.github.io/games/maze" };
 
-    input.addEventListener("keydown", function(event) {
+let commandHistory = [];
+let historyIndex = -1;
+let dropdownIndex = -1;
+let currentMatches = [];
+
+input.addEventListener("keydown", function(event) {
+    if (event.key === "Enter") {
+        if (dropdown.style.display === "flex" && dropdownIndex >= 0) {
+            input.value = currentMatches[dropdownIndex];
+        }
+        processCommand(input.value);
+        hideDropdown();
+    } else if (event.key === "ArrowUp") {
+        if (dropdown.style.display === "flex") navigateDropdown(-1);
+        else if (commandHistory.length > 0) {
+            historyIndex = (historyIndex <= 0) ? commandHistory.length - 1 : historyIndex - 1;
+            input.value = commandHistory[historyIndex];
+        }
+        event.preventDefault();
+    } else if (event.key === "ArrowDown") {
+        if (dropdown.style.display === "flex") navigateDropdown(1);
+        else if (commandHistory.length > 0) {
+            historyIndex = (historyIndex >= commandHistory.length - 1) ? 0 : historyIndex + 1;
+            input.value = commandHistory[historyIndex];
+        }
+        event.preventDefault();
+    } else if (event.key === "Tab") {
+        event.preventDefault();
+        handleTabAutocomplete(event.shiftKey ? -1 : 1);
+    } else if (event.key === "Escape") {
+        hideDropdown();
+    }
+});
+
+function processCommand(commandValue) {
+    const command = commandValue.trim().toLowerCase();
+
+    if (commandValue.trim() !== "") {
+        commandHistory.push(commandValue);
+        historyIndex = commandHistory.length;
+    }
+
+    const executedLine = document.createElement("div");
+    executedLine.textContent = "user@homebrew:~$ " + commandValue;
+    terminal.insertBefore(executedLine, document.getElementById("currentLine"));
+
+    const output = document.createElement("div");
+
+    if (command.startsWith("/game")) {
+        const parts = command.split(" ");
+        if (parts.length > 1 && gameSubCommands[parts[1]]) {
+            output.innerHTML = `Redirecting to ${parts[1]}...`;
+            terminal.insertBefore(output, document.getElementById("currentLine"));
+            setTimeout(() => {
+                window.location.href = gameSubCommands[parts[1]];
+            }, 500);
+        } else {
+            output.textContent = "Available /game sub-commands: " + Object.keys(gameSubCommands).join(", ");
+            terminal.insertBefore(output, document.getElementById("currentLine"));
+        }
+    } else if (command === "help") {
+        output.textContent = "Available commands: " + availableCommands.join(", ");
+        terminal.insertBefore(output, document.getElementById("currentLine"));
+    } else if (command === "about") {
+        output.textContent = "This is a homebrew terminal-style website with neon green text!";
+        terminal.insertBefore(output, document.getElementById("currentLine"));
+    } else if (command === "clear") {
+        terminal.innerHTML = "";
+        terminal.appendChild(createNewInputLine());
+        scrollToBottom();
+        return;
+    } else if (command.length > 0) {
+        output.textContent = "Command not found: " + command;
+        terminal.insertBefore(output, document.getElementById("currentLine"));
+    }
+
+    input.value = "";
+    hideDropdown();
+    scrollToBottom();
+}
+
+function createNewInputLine() {
+    const newLine = document.createElement("div");
+    newLine.className = "input-line";
+    newLine.id = "currentLine";
+
+    const prompt = document.createElement("span");
+    prompt.className = "prompt";
+    prompt.textContent = "user@homebrew:~$";
+
+    const newInput = document.createElement("input");
+    newInput.type = "text";
+    newInput.id = "commandInput";
+    newInput.autofocus = true;
+
+    const cursor = document.createElement("span");
+    cursor.className = "cursor";
+
+    const newDropdown = document.createElement("div");
+    newDropdown.className = "dropdown";
+    newDropdown.id = "dropdown";
+
+    newLine.appendChild(prompt);
+    newLine.appendChild(newInput);
+    newLine.appendChild(cursor);
+    newLine.appendChild(newDropdown);
+
+    input = newInput;
+    dropdown = newDropdown;
+    dropdownIndex = -1;
+    currentMatches = [];
+
+    newInput.addEventListener("keydown", function(event) {
         if (event.key === "Enter") {
             if (dropdown.style.display === "flex" && dropdownIndex >= 0) {
                 input.value = currentMatches[dropdownIndex];
             }
-            processCommand(input.value);
+            processCommand(newInput.value);
             hideDropdown();
-        } else if (event.key === "ArrowUp") {
-            if (dropdown.style.display === "flex") {
-                navigateDropdown(-1);
-            } else if (commandHistory.length > 0) {
-                historyIndex = (historyIndex <= 0) ? commandHistory.length - 1 : historyIndex - 1;
-                input.value = commandHistory[historyIndex];
-            }
+        } else if (event.key === "Tab") { 
+            event.preventDefault(); 
+            handleTabAutocomplete(event.shiftKey ? -1 : 1); 
+        } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             event.preventDefault();
-        } else if (event.key === "ArrowDown") {
-            if (dropdown.style.display === "flex") {
-                navigateDropdown(1);
-            } else if (commandHistory.length > 0) {
-                historyIndex = (historyIndex >= commandHistory.length - 1) ? 0 : historyIndex + 1;
-                input.value = commandHistory[historyIndex];
-            }
-            event.preventDefault();
-        } else if (event.key === "Tab") {
-            event.preventDefault();
-            handleTabAutocomplete(event.shiftKey ? -1 : 1); // Shift+Tab = backwards
+        } else if (event.key === "Escape") {
+            hideDropdown();
         }
     });
 
-    function processCommand(commandValue) {
-        const command = commandValue.trim().toLowerCase();
+    return newLine;
+}
 
-        if (commandValue.trim() !== "") {
-            commandHistory.push(commandValue);
-            historyIndex = commandHistory.length;
+function handleTabAutocomplete(direction = 1) {
+    const fullInput = input.value.trim().toLowerCase();
+    let filter = fullInput;
+    let matches = [];
+
+    if (fullInput.startsWith("/game")) {
+        const parts = fullInput.split(" ");
+        if (parts.length === 1) {
+            matches = availableCommands.filter(cmd => cmd.startsWith(fullInput));
+        } else if (parts.length === 2) {
+            filter = parts[1];
+            matches = Object.keys(gameSubCommands).filter(cmd => cmd.startsWith(filter));
         }
-
-        const executedLine = document.createElement("div");
-        executedLine.textContent = "user@homebrew:~$ " + commandValue;
-        terminal.insertBefore(executedLine, document.getElementById("currentLine"));
-
-        const output = document.createElement("div");
-        if (command === "help") {
-            output.textContent = "Available commands: " + availableCommands.join(", ");
-        } else if (command === "about") {
-            output.textContent = "This is a homebrew terminal-style website with neon green text!";
-        } else if (command === "clear") {
-            terminal.innerHTML = "";
-            terminal.appendChild(createNewInputLine());
-            scrollToBottom();
-            return;
-        } else if (command.length > 0) {
-            output.textContent = "Command not found: " + command;
-        }
-
-        if (output.textContent) terminal.insertBefore(output, document.getElementById("currentLine"));
-        input.value = "";
-        hideDropdown();
-        scrollToBottom();
+    } else {
+        matches = availableCommands.filter(cmd => cmd.startsWith(filter));
     }
 
-    function createNewInputLine() {
-        const newLine = document.createElement("div");
-        newLine.className = "input-line";
-        newLine.id = "currentLine";
+    if (matches.length === 0) return;
 
-        const prompt = document.createElement("span");
-        prompt.className = "prompt";
-        prompt.textContent = "user@homebrew:~$";
-
-        const newInput = document.createElement("input");
-        newInput.type = "text";
-        newInput.id = "commandInput";
-        newInput.autofocus = true;
-
-        const cursor = document.createElement("span");
-        cursor.className = "cursor";
-
-        const newDropdown = document.createElement("div");
-        newDropdown.className = "dropdown";
-        newDropdown.id = "dropdown";
-
-        newLine.appendChild(prompt);
-        newLine.appendChild(newInput);
-        newLine.appendChild(cursor);
-        newLine.appendChild(newDropdown);
-
-        input = newInput;
-        dropdown = newDropdown;
-        dropdownIndex = -1;
-        currentMatches = [];
-
-        newInput.addEventListener("keydown", function(event) {
-            if (event.key === "Enter") {
-                if (dropdown.style.display === "flex" && dropdownIndex >= 0) {
-                    input.value = currentMatches[dropdownIndex];
-                }
-                processCommand(newInput.value);
-                hideDropdown();
-            } else if (event.key === "Tab") {
-                event.preventDefault();
-                handleTabAutocomplete(event.shiftKey ? -1 : 1); // Shift+Tab
-            } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                event.preventDefault();
-            }
-        });
-
-        return newLine;
-    }
-
-    function handleTabAutocomplete(direction = 1) {
-        const filter = input.value.trim().toLowerCase();
-
-        if (dropdown.style.display !== "flex") {
-            currentMatches = availableCommands.filter(cmd => cmd.startsWith(filter));
-            if (currentMatches.length === 0) return;
-            showDropdown(currentMatches);
-            dropdownIndex = (direction === 1 ? 0 : currentMatches.length - 1);
-            highlightDropdownItem();
-        } else {
-            dropdownIndex += direction;
-            if (dropdownIndex < 0) dropdownIndex = currentMatches.length - 1;
-            if (dropdownIndex >= currentMatches.length) dropdownIndex = 0;
-            highlightDropdownItem();
-        }
-    }
-
-    function showDropdown(matches) {
-        dropdown.innerHTML = "";
-        matches.forEach((cmd, i) => {
-            const item = document.createElement("div");
-            item.textContent = cmd;
-            item.className = "dropdown-item";
-            if (i === dropdownIndex) item.classList.add("active");
-            item.addEventListener("click", () => {
-                input.value = cmd;
-                hideDropdown();
-                input.focus();
-            });
-            dropdown.appendChild(item);
-        });
-        dropdown.style.display = "flex";
-        dropdown.style.flexDirection = "column";
-    }
-
-    function hideDropdown() {
-        dropdown.style.display = "none";
-        dropdownIndex = -1;
-        currentMatches = [];
-    }
-
-    function highlightDropdownItem() {
-        const items = dropdown.querySelectorAll(".dropdown-item");
-        items.forEach((item, i) => {
-            item.classList.toggle("active", i === dropdownIndex);
-        });
-        input.value = currentMatches[dropdownIndex];
-    }
-
-    function navigateDropdown(direction) {
-        if (currentMatches.length === 0) return;
+    if (dropdown.style.display !== "flex") {
+        currentMatches = matches;
+        showDropdown(currentMatches);
+        dropdownIndex = (direction === 1 ? 0 : currentMatches.length - 1);
+        highlightDropdownItem();
+    } else {
         dropdownIndex += direction;
         if (dropdownIndex < 0) dropdownIndex = currentMatches.length - 1;
         if (dropdownIndex >= currentMatches.length) dropdownIndex = 0;
         highlightDropdownItem();
     }
+}
 
-    function scrollToBottom() {
-        terminal.scrollTop = terminal.scrollHeight;
-    }
+function showDropdown(matches) {
+    dropdown.innerHTML = "";
+    matches.forEach((cmd, i) => {
+        const item = document.createElement("div");
+        item.textContent = cmd;
+        item.className = "dropdown-item";
+        if (i === dropdownIndex) item.classList.add("active");
+        item.addEventListener("click", () => {
+            input.value = input.value.startsWith("/game ") ? "/game " + cmd : cmd;
+            hideDropdown();
+            input.focus();
+        });
+        dropdown.appendChild(item);
+    });
+    dropdown.style.display = "flex";
+    dropdown.style.flexDirection = "column";
+}
 
-    scrollToBottom();
+function hideDropdown() {
+    dropdown.style.display = "none";
+    dropdownIndex = -1;
+    currentMatches = [];
+}
+
+function highlightDropdownItem() {
+    const items = dropdown.querySelectorAll(".dropdown-item");
+    items.forEach((item, i) => item.classList.toggle("active", i === dropdownIndex));
+    const selected = currentMatches[dropdownIndex];
+    if (input.value.startsWith("/game ")) input.value = "/game " + selected;
+    else input.value = selected;
+}
+
+function navigateDropdown(direction) {
+    if (currentMatches.length === 0) return;
+    dropdownIndex += direction;
+    if (dropdownIndex < 0) dropdownIndex = currentMatches.length - 1;
+    if (dropdownIndex >= currentMatches.length) dropdownIndex = 0;
+    highlightDropdownItem();
+}
+
+function scrollToBottom() {
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+scrollToBottom();
 </script>
+</body>
+</html>
