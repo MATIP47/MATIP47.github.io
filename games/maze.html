@@ -20,6 +20,7 @@ canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated}
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d', {alpha:false});
 let radarScale = 8;
+
 function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
 addEventListener('resize', resize);
 resize();
@@ -35,113 +36,161 @@ let flickerLights = [];
 let enemies = [];
 let invincible = false;
 
-function shuffle(arr, rand) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } }
-function generateMaze() { /* your maze generation code */ }
+// Your maze generation code goes here (unchanged)...
 
-class Enemy {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.angle = 0;
-        this.speed = 1.2;
-        this.noclip = false;
-        this.alpha = 0;
-    }
-    update(dt, radarLineAngle){
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        this.angle = Math.atan2(dy, dx);
-        const moveX = Math.cos(this.angle)*this.speed*dt;
-        const moveY = Math.sin(this.angle)*this.speed*dt;
-        if(!this.noclip){ if(getCell(Math.floor(this.x+moveX),Math.floor(this.y+moveY))===0){this.x+=moveX; this.y+=moveY;} }
-        else{ this.x+=moveX; this.y+=moveY; if(getCell(Math.floor(this.x),Math.floor(this.y))===0) this.noclip=false; }
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if(!invincible && dist<0.5){ player.x=Math.floor(MAX_MAZE_SIZE/2)+0.5; player.y=Math.floor(MAX_MAZE_SIZE/2)+0.5; }
+// Player and movement setup
+let player={x:0,y:0,angle:0,speed:baseSpeed,bobPhase:0,tilt:0};
+[player.x,player.y]=[Math.floor(MAX_MAZE_SIZE/2)+0.5,Math.floor(MAX_MAZE_SIZE/2)+0.5];
 
-        // Radar detection with fade
-        const angleToEnemy=Math.atan2(this.y-player.y,this.x-player.x);
-        const radarDiff=Math.atan2(Math.sin(radarLineAngle-angleToEnemy),Math.cos(radarLineAngle-angleToEnemy));
-        if(Math.abs(radarDiff)<0.03){ this.alpha=1; }
-        else if(this.alpha>0){ this.alpha-=dt*0.15; if(this.alpha<0)this.alpha=0; }
-    }
-    drawRadar(){
-        if(this.alpha<=0) return;
-        const baseRadarRadius=120;
-        const radarRadius=baseRadarRadius*1.5;
-        const cx=canvas.width - radarRadius - 0.02 * canvas.width;
-        const cy=radarRadius + 0.02 * canvas.height;
-        ctx.save(); ctx.translate(cx,cy); ctx.rotate(-player.angle-Math.PI/2);
-        const px=(this.x-player.x)*radarScale; const py=(this.y-player.y)*radarScale;
-        if(Math.sqrt(px*px+py*py)<radarRadius-2){ctx.globalAlpha=this.alpha; ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;}
-        ctx.restore();
-    }
-    draw3D(){
-        if(this.alpha<=0) return;
-        const w=5,h=5;
-        const screenX=(this.x-player.x)*10+canvas.width/2;
-        const screenY=(this.y-player.y)*10+canvas.height/2;
-        ctx.globalAlpha=this.alpha;
-        ctx.fillStyle='red';
-        ctx.fillRect(screenX-w/2, screenY-h/2, w, h);
-        ctx.globalAlpha=1;
-    }
+const keys={};
+addEventListener('keydown',e=>keys[e.code]=true);
+addEventListener('keyup',e=>keys[e.code]=false);
+
+addEventListener('keydown',e=>{
+  if (e.code==='Minus'||e.code==='NumpadSubtract'){ radarScale=Math.max(2,radarScale-1); e.preventDefault();}
+  if (e.code==='Equal'||e.code==='NumpadAdd'){ radarScale=Math.min(20,radarScale+1); e.preventDefault();}
+});
+
+let sprintMax=5,sprintCurrent=sprintMax,isRegenerating=false;
+
+// Footstep sound setup
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const footstepAudio = new Audio('sounds/footsteps.mp3');
+footstepAudio.preload='auto'; footstepAudio.load();
+let lastFootstepTime=0;
+function playFootstep(){
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  footstepAudio.playbackRate=0.9+Math.random()*0.3;
+  footstepAudio.volume=0.2+Math.random()*0.3;
+  footstepAudio.currentTime=0;
+  footstepAudio.play();
 }
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-const footstepAudio = new Audio('sounds/footsteps.mp3'); footstepAudio.preload='auto'; footstepAudio.load();
-let lastFootstepTime=0;
-function playFootstep(){if(audioCtx.state==='suspended') audioCtx.resume(); footstepAudio.playbackRate=0.9+Math.random()*0.3; footstepAudio.volume=0.2+Math.random()*0.3; footstepAudio.currentTime=0; footstepAudio.play();}
+// Enemy class
+class Enemy {
+  constructor(x,y){
+    this.x=x; this.y=y; this.angle=0; this.speed=1.2; this.noclip=false; this.alpha=0;
+  }
+  update(dt,radarLineAngle){
+    const dx=player.x-this.x, dy=player.y-this.y;
+    this.angle=Math.atan2(dy,dx);
+    const moveX=Math.cos(this.angle)*this.speed*dt;
+    const moveY=Math.sin(this.angle)*this.speed*dt;
+    if(!this.noclip){ if(getCell(Math.floor(this.x+moveX),Math.floor(this.y+moveY))===0){ this.x+=moveX; this.y+=moveY; } }
+    else{ this.x+=moveX; this.y+=moveY; if(getCell(Math.floor(this.x),Math.floor(this.y))===0) this.noclip=false; }
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(!invincible && dist<0.5){ player.x=Math.floor(MAX_MAZE_SIZE/2)+0.5; player.y=Math.floor(MAX_MAZE_SIZE/2)+0.5; }
+    const angleToEnemy=Math.atan2(this.y-player.y,this.x-player.x);
+    const radarDiff=Math.atan2(Math.sin(radarLineAngle-angleToEnemy),Math.cos(radarLineAngle-angleToEnemy));
+    if(Math.abs(radarDiff)<0.03){ this.alpha=1; }
+    else if(this.alpha>0){ this.alpha-=dt*0.15; if(this.alpha<0)this.alpha=0; }
+  }
+  drawRadar(cx,cy,radarRadius){
+    if(this.alpha<=0) return;
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(-player.angle-Math.PI/2);
+    const px=(this.x-player.x)*radarScale; const py=(this.y-player.y)*radarScale;
+    if(Math.sqrt(px*px+py*py)<radarRadius-2){ ctx.globalAlpha=this.alpha; ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;}
+    ctx.restore();
+  }
+  draw3D(){
+    if(this.alpha<=0) return;
+    const w=5,h=5;
+    const screenX=(this.x-player.x)*10+canvas.width/2;
+    const screenY=(this.y-player.y)*10+canvas.height/2;
+    ctx.globalAlpha=this.alpha; ctx.fillStyle='red'; ctx.fillRect(screenX-w/2, screenY-h/2, w, h); ctx.globalAlpha=1;
+  }
+}
 
-// Player and movement functions remain as before
+function drawRadar(){
+  const baseRadarRadius=120;
+  const radarRadius=baseRadarRadius*1.5;
+  const cx=canvas.width - radarRadius - 0.02 * canvas.width;
+  const cy=radarRadius + 0.02 * canvas.height;
 
-// Spawn enemy after 60s
-setTimeout(()=>{
-    let tries=0;
-    while(tries<100){
-        let gx=Math.floor(Math.random()*MAX_MAZE_SIZE);
-        let gy=Math.floor(Math.random()*MAX_MAZE_SIZE);
-        if(getCell(gx,gy)===0){ enemies.push(new Enemy(gx+0.5,gy+0.5)); break; }
-        tries++;
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,radarRadius,0,Math.PI*2); ctx.clip();
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(-player.angle-Math.PI/2);
+
+  // Draw minimap walls as lines
+  ctx.save(); ctx.scale(radarScale,radarScale);
+  const maxCells=(radarRadius-2)/radarScale+1;
+  const playerCellX=player.x, playerCellY=player.y;
+  ctx.strokeStyle='#999'; ctx.lineWidth=0.5;
+  for(let gx=Math.floor(playerCellX-maxCells);gx<=Math.ceil(playerCellX+maxCells);gx++){
+    for(let gy=Math.floor(playerCellY-maxCells);gy<=Math.ceil(playerCellY+maxCells);gy++){
+      if(getCell(gx,gy)===1){
+        const px=gx-playerCellX, py=gy-playerCellY;
+        if(Math.sqrt(px*px+py*py)<radarRadius-2){ ctx.strokeRect(px,py,1,1); }
+      }
     }
-},60000);
+  }
+  ctx.restore(); ctx.restore();
 
-addEventListener('keydown', e=>{
-    if(e.code==='KeyI') invincible=!invincible;
-    if(e.code==='KeyE'){
-        let ex=player.x+Math.cos(player.angle)*3;
-        let ey=player.y+Math.sin(player.angle)*3;
-        let noclip=false;
-        if(getCell(Math.floor(ex),Math.floor(ey))!==0) noclip=true;
-        const enemy=new Enemy(ex,ey); enemy.noclip=noclip; enemies.push(enemy);
-    }
-    if(e.code==='Minus'||e.code==='NumpadSubtract'){ radarScale=Math.max(2,radarScale-1); e.preventDefault();}
-    if(e.code==='Equal'||e.code==='NumpadAdd'){ radarScale=Math.min(20,radarScale+1); e.preventDefault();}
-});
+  // Radar lines
+  const radarLineColor='#333';
+  const innerRadii=[radarRadius*0.66,radarRadius*0.33,radarRadius*0.15];
+  for(const r of innerRadii){ ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.strokeStyle=radarLineColor; ctx.lineWidth=1; ctx.stroke(); }
+  const angles=[45,135,225,315].map(a=>a*Math.PI/180);
+  for(const angle of angles){
+    const startX=cx+innerRadii[2]*Math.cos(angle), startY=cy+innerRadii[2]*Math.sin(angle);
+    const endX=cx+radarRadius*Math.cos(angle), endY=cy+radarRadius*Math.sin(angle);
+    ctx.beginPath(); ctx.moveTo(startX,startY); ctx.lineTo(endX,endY); ctx.strokeStyle=radarLineColor; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  const time=performance.now()*0.002;
+  const lineX=Math.cos(time)*radarRadius, lineY=Math.sin(time)*radarRadius;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+lineX,cy+lineY); ctx.strokeStyle='#333'; ctx.lineWidth=1; ctx.stroke();
+
+  // Draw enemies on radar
+  for(const e of enemies) e.drawRadar(cx,cy,radarRadius);
+
+  ctx.fillStyle='red'; ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function render(){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  const w=canvas.width,h=canvas.height;
+  const bobOffset=Math.sin(player.bobPhase)*1.5;
+
+  // Floor and ceiling
+  ctx.fillStyle='rgb(30,30,40)'; ctx.fillRect(0,0,w,h/2);
+  ctx.fillStyle='rgb(150,100,50)'; ctx.fillRect(0,h/2,w,h/2);
+
+  // Draw walls here...
+
+  // Draw enemies in 3D
+  for(const e of enemies) e.draw3D();
+
+  drawRadar();
+
+  // Draw stamina bar
+  const barWidth=w*0.4,barHeight=14,barX=(w-barWidth)/2,barY=h-0.03*h-barHeight;
+  ctx.lineWidth=2; ctx.strokeStyle='#0a0'; ctx.fillStyle='#222'; ctx.fillRect(barX,barY,barWidth,barHeight); ctx.strokeRect(barX,barY,barWidth,barHeight);
+  const fillWidth=(sprintCurrent/sprintMax)*barWidth;
+  ctx.fillStyle=isRegenerating?'#a00':'#0a0'; ctx.fillRect(barX,barY,fillWidth,barHeight);
+}
 
 let last=performance.now();
 function loop(){
-    const now=performance.now(), dt=(now-last)/1000; last=now;
-    const forward=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
-    const strafe=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
-    const dx=(forward*Math.cos(player.angle)-strafe*Math.sin(player.angle))*player.speed;
-    const dy=(forward*Math.sin(player.angle)+strafe*Math.cos(player.angle))*player.speed;
-    movePlayer(dx,dy,dt);
+  const now=performance.now(), dt=(now-last)/1000; last=now;
+  const forward=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
+  const strafe=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
+  const dx=(forward*Math.cos(player.angle)-strafe*Math.sin(player.angle))*player.speed;
+  const dy=(forward*Math.sin(player.angle)+strafe*Math.cos(player.angle))*player.speed;
+  movePlayer(dx,dy,dt);
 
-    const radarLineAngle=now*0.002;
-    for(const enemy of enemies){enemy.update(dt, radarLineAngle);}
+  // Update enemies
+  const radarLineAngle=performance.now()*0.002;
+  for(const e of enemies) e.update(dt,radarLineAngle);
 
-    render();
-
-    // Draw 3D enemies
-    for(const enemy of enemies){enemy.draw3D();}
-
-    requestAnimationFrame(loop);
+  render();
+  requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
 canvas.addEventListener('click',()=>canvas.requestPointerLock());
-addEventListener('mousemove', e=>{if(document.pointerLockElement===canvas){player.angle+=e.movementX*0.0022;}});
-document.getElementById('fullscreenBtn').addEventListener('click',()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();});
+addEventListener('mousemove',e=>{ if(document.pointerLockElement===canvas){ player.angle+=e.movementX*0.0022; }});
+document.getElementById('fullscreenBtn').addEventListener('click',()=>{ if(!document.fullscreenElement)document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
 </script>
 </body>
 </html>
