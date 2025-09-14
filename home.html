@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homebrew Terminal</title>
+    <style>
+        /* Terminal look */
+        body {
+            background-color: #000000; /* black background */
+            color: #39FF14; /* neon green text */
+            font-family: "Courier New", Courier, monospace;
+            font-size: 18px;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* Blinking cursor effect */
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            background-color: #39FF14;
+            animation: blink 1s step-start infinite;
+        }
+
+        @keyframes blink {
+            50% { background-color: transparent; }
+        }
+
+        /* Optional container for commands */
+        .terminal {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Command input style */
+        .input-line {
+            display: flex;
+        }
+
+        .prompt {
+            margin-right: 5px;
+        }
+
+        input {
+            background: none;
+            border: none;
+            color: #39FF14;
+            outline: none;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 18px;
+            flex: 1;
+        }
+
+        /* Optional text shadow for extra neon glow */
+        .neon {
+            text-shadow: 0 0 5px #39FF14, 0 0 10px #39FF14, 0 0 20px #39FF14;
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal">
+        <p class="neon">Welcome to Homebrew Terminal!</p>
+        <p class="neon">Type 'help' to see available commands.</p>
+        <div class="input-line">
+            <span class="prompt">user@homebrew:~$</span>
+            <input type="text" id="commandInput" autofocus />
+            <span class="cursor"></span>
+        </div>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById("commandInput");
+        const output = document.getElementById("output");
+
+        input.addEventListener("keydown", function(event) {
+            if(event.key === "Enter") {
+                const command = input.value.trim().toLowerCase();
+                if(command === "help") {
+                    output.innerHTML += `<p class="neon">Available commands: help, about, clear</p>`;
+                } else if(command === "about") {
+                    output.innerHTML += `<p class="neon">This is a homebrew terminal-style website with neon green text!</p>`;
+                } else if(command === "clear") {
+                    output.innerHTML = "";
+                } else {
+                    output.innerHTML += `<p class="neon">Command not found: ${command}</p>`;
+                }
+                input.value = "";
+                output.scrollTop = output.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
