@@ -10,9 +10,9 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#000;color:#39ff1
 a{color:#39ff14;text-decoration:none;font-weight:bold;border-bottom:1px dashed #39ff14;}
 a:hover{color:#00ff00;border-bottom:1px solid #00ff00;}
 .blinking{animation:blink 1s step-start infinite;}
-@keyframes blink{50%{opacity:0;}}
 canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1;}
-.line{white-space:pre;}
+.line{position:relative;display:inline-block;white-space:pre;margin-bottom:0.2em;padding:0.05em 0.15em;overflow:hidden;}
+.line-bg{position:absolute;top:0;left:0;height:100%;background:rgba(0,0,0,0.7);width:0;transition:width 0.05s linear;z-index:-1;}
 </style>
 </head>
 <body>
@@ -82,7 +82,7 @@ const lines=[
 "Redirecting..."
 ];
 
-let currentLine=0,charIndex=0,lineElement=null;
+let currentLine=0,charIndex=0,lineElement=null,lineBg=null;
 
 // GLITCH CHAR ONLY FOR VISUAL EFFECT (falling letters)
 function glitchChar(c){
@@ -93,11 +93,13 @@ function glitchChar(c){
 
 function typeLine(){
     if(currentLine>=lines.length){
+        fallback.style.display="block"; // show fallback
+        // blinking cursor
         const cursor=document.createElement("span");
         cursor.textContent="_";
         cursor.classList.add("blinking");
         lineElement.appendChild(cursor);
-        fallback.style.display="block";
+        // redirect after 1 second
         setTimeout(()=>{window.location.href="https://matip47.github.io/home";},1000);
         return;
     }
@@ -105,15 +107,22 @@ function typeLine(){
     if(!lineElement){
         lineElement=document.createElement("div");
         lineElement.className="line";
+        lineBg=document.createElement("div");
+        lineBg.className="line-bg";
+        lineElement.appendChild(lineBg);
         terminal.appendChild(lineElement);
     }
 
     if(charIndex<lines[currentLine].length){
         const realChar=lines[currentLine][charIndex];
-        // append only the real character to the DOM
-        lineElement.textContent+=realChar;
+        // append only the real character
+        lineElement.textContent = lineElement.textContent.replace(/^\s*/, "");
+        lineElement.textContent += realChar;
 
-        // add glitch to canvas only
+        // expand background width progressively
+        lineBg.style.width = ((charIndex+1)/lines[currentLine].length*100) + "%";
+
+        // add visual glitch to canvas only
         if(Math.random()<0.1)fallingLetters.push({
             char: glitchChar(realChar),
             x: Math.random()*canvas.width,
@@ -125,11 +134,13 @@ function typeLine(){
         charIndex++;
         setTimeout(typeLine,25+Math.random()*60);
     } else {
-        // Line complete — rewrite clean line instantly
-        lineElement.textContent=lines[currentLine];
+        // line complete — rewrite clean line instantly
+        lineElement.textContent = lines[currentLine];
+        lineBg.style.width="100%"; // ensure background fills completely
         currentLine++;
         charIndex=0;
         lineElement=null;
+        lineBg=null;
         setTimeout(typeLine,150+Math.random()*150);
     }
 }
