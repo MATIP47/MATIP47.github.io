@@ -3,31 +3,37 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="refresh" content="22;url=https://matip47.github.io/home">
-<title>Legendary Cyberpunk Terminal</title>
+</title>Booting Terminal</title>
 <style>
-    body {
+    html, body {
         margin: 0;
-        overflow: hidden;
+        padding: 0;
+        width: 100%;
+        height: 100%;
         background: #000;
         color: #39ff14;
         font-family: "Courier New", Courier, monospace;
+        overflow: hidden;
     }
     #terminal {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
-        padding: 20px;
+        padding: 2vh 2vw;
+        font-size: calc(10px + 1.2vh); /* scales with screen size */
+        line-height: 1.4;
         z-index: 2;
         white-space: pre-wrap;
     }
     #fallback {
         position: absolute;
-        bottom: 20px;
+        bottom: 3vh;
         width: 100%;
         text-align: center;
         z-index: 2;
         display: none;
+        font-size: calc(10px + 1vh);
     }
     a {
         color: #39ff14;
@@ -49,6 +55,8 @@
         position: fixed;
         top: 0;
         left: 0;
+        width: 100%;
+        height: 100%;
         z-index: 1;
     }
 </style>
@@ -59,20 +67,26 @@
 <p id="fallback">If you are not redirected automatically, <a href="https://matip47.github.io/home">click here</a>.</p>
 
 <script>
-// MATRIX & COLLIDING LETTERS
 const canvas = document.getElementById("matrix");
 const ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
 
+let fontSize;
+let columns;
+let drops = [];
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^%";
-const fontSize = 18;
-const columns = Math.floor(canvas.width / fontSize);
-const drops = [];
-
-for(let i=0;i<columns;i++) drops[i] = Math.random()*canvas.height;
-
 const fallingLetters = [];
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    fontSize = Math.max(14, Math.floor(window.innerHeight / 40)); // scale font size with screen height
+    columns = Math.floor(canvas.width / fontSize);
+    drops = [];
+    for (let i = 0; i < columns; i++) drops[i] = Math.random() * canvas.height;
+}
+
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
 
 function drawMatrix() {
     ctx.fillStyle = "rgba(0,0,0,0.05)";
@@ -87,19 +101,17 @@ function drawMatrix() {
         if(drops[i]*fontSize>canvas.height || Math.random()>0.975) drops[i]=0;
     }
 
-    // Draw falling letters interacting
     for(let i=fallingLetters.length-1;i>=0;i--){
-        let f = fallingLetters[i];
+        let f=fallingLetters[i];
         ctx.fillStyle="#39ff14";
         ctx.fillText(f.char,f.x,f.y);
-        f.y += f.speed;
-        f.x += Math.sin(f.y/10 + f.offset)*2;
+        f.y+=f.speed;
+        f.x+=Math.sin(f.y/10+f.offset)*2;
 
-        // Collision with other falling letters
         for(let j=0;j<fallingLetters.length;j++){
             if(i!==j){
-                let dX = fallingLetters[j].x - f.x;
-                let dY = fallingLetters[j].y - f.y;
+                let dX=fallingLetters[j].x - f.x;
+                let dY=fallingLetters[j].y - f.y;
                 if(Math.abs(dX)<fontSize && Math.abs(dY)<fontSize){
                     f.x -= dX*0.05;
                     f.y -= dY*0.05;
@@ -107,14 +119,14 @@ function drawMatrix() {
             }
         }
 
-        f.speed += 0.05;
+        f.speed+=0.05;
         if(f.y>canvas.height) fallingLetters.splice(i,1);
     }
 }
 
 setInterval(drawMatrix,50);
 
-// TERMINAL TYPING WITH GLITCH & FALLING LETTERS
+// TERMINAL TYPING
 const terminal=document.getElementById("terminal");
 const fallback=document.getElementById("fallback");
 const lines=[
@@ -142,10 +154,8 @@ function flickerLine(line){
 function typeLine(){
     if(currentLine<lines.length){
         if(charIndex<lines[currentLine].length){
-            const char = glitchChar(lines[currentLine][charIndex]);
-            terminal.textContent += char;
-
-            // Steal letters for matrix rain
+            const char=glitchChar(lines[currentLine][charIndex]);
+            terminal.textContent+=char;
             if(Math.random()<0.1){
                 fallingLetters.push({
                     char: char,
@@ -155,7 +165,6 @@ function typeLine(){
                     offset: Math.random()*5
                 });
             }
-
             charIndex++;
             setTimeout(typeLine,25+Math.random()*60);
         } else {
@@ -185,15 +194,7 @@ function typeLine(){
 }
 
 typeLine();
-
-// SAFETY REDIRECT
 setTimeout(()=>{window.location.href="https://matip47.github.io/home"},22000);
-
-// RESIZE CANVAS
-window.addEventListener('resize',()=>{
-    canvas.width=window.innerWidth;
-    canvas.height=window.innerHeight;
-});
 </script>
 </body>
 </html>
