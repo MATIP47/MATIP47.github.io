@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>user@homebrew:~$</title>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-body { margin:0; padding:0; background:#000; color:#39FF14; font-family:'Press Start 2P', monospace; }
-#terminal-container { width:95vw; max-width:1200px; margin:10px auto; padding:10px; background:#000; border-radius:8px; display:flex; flex-direction:column; }
-#terminal { flex:1; overflow-y:auto; min-height:60vh; background:#000; color:#39FF14; width:100%; text-align:left; }
-.output-line { white-space:pre-wrap; color:#39FF14; text-align:left; width:100%; }
-.input-line { display:flex; align-items:center; margin-top:2px; width:100%; }
-.prompt { margin-right:6px; color:#39FF14; }
-input { background:none; border:none; color:#39FF14; outline:none; font:inherit; flex:1; width:100%; }
-.dropdown { position:absolute; background:#000; border:1px solid #39FF14; display:none; flex-direction:column; z-index:10; color:#39FF14; }
-.dropdown-item { padding:4px 8px; cursor:pointer; }
-.dropdown-item.active { background:#39FF14; color:#000; }
-.chess-board { display:inline-block; border:2px solid #39FF14; margin:8px 0; }
-.chess-row { display:flex; }
-.chess-cell { width:32px; height:32px; text-align:center; line-height:32px; color:#39FF14; border:1px solid #39FF14; box-sizing:border-box; }
-.chess-label { width:32px; text-align:center; color:#39FF14; }
+  :root{--neon:#39FF14;--bg:#000}
+  body{margin:0;background:var(--bg);color:var(--neon);font-family:'Press Start 2P',monospace}
+  #terminal-container{width:95vw;max-width:1200px;margin:10px auto;padding:12px;background:var(--bg);box-sizing:border-box}
+  #terminal{min-height:60vh;overflow:auto}
+  .output-line{white-space:pre-wrap;color:var(--neon);text-align:left;margin:2px 0}
+  .input-line{display:flex;align-items:center;margin-top:6px}
+  .prompt{margin-right:8px}
+  input{background:none;border:none;color:var(--neon);outline:none;flex:1;font:inherit}
+  .chess-board{display:inline-block;border:2px solid var(--neon);margin:12px 0}
+  .chess-row{display:flex}
+  .chess-cell{width:36px;height:36px;line-height:36px;text-align:center;border:1px solid var(--neon);box-sizing:border-box}
+  .chess-label{width:36px;height:36px;line-height:36px;text-align:center;color:var(--neon);border:1px solid var(--neon);box-sizing:border-box;display:flex;align-items:center;justify-content:center}
+  .bottom-label{display:flex}
+  .bottom-label .chess-cell{display:flex;align-items:center;justify-content:center}
+  .board-wrapper{display:inline-block}
+  .ms-row{display:flex;margin:0}
+  .ms-cell{width:24px;height:24px;line-height:24px;text-align:center;border:1px solid var(--neon);user-select:none;cursor:pointer;color:var(--neon);}
 </style>
 </head>
 <body>
@@ -27,160 +30,100 @@ input { background:none; border:none; color:#39FF14; outline:none; font:inherit;
   <div id="terminal"></div>
 </div>
 <script>
-const COMMANDS=[{cmd:'game', sub:['maze','minesweeper','chess']},{cmd:'about'}];
-let history=[], historyIndex=-1;
-const terminal=document.getElementById('terminal');
+// --- Persistent State ---
+let currentTheme = localStorage.getItem('theme')||'homebrew';
+let openGame = null; // 'chess' or 'minesweeper'
+let gameState = null; // stores chess/minesweeper board
 
-let chessGame=null;
-const fileToCol={a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7};
-const rankToRow={'1':7,'2':6,'3':5,'4':4,'5':3,'6':2,'7':1,'8':0};
-const colToFile=['a','b','c','d','e','f','g','h'];
-const rowToRank=['8','7','6','5','4','3','2','1'];
-const pieceValues = {'♙':1,'♖':5,'♘':3,'♗':3,'♕':9,'♔':100,'♟':-1,'♜':-5,'♞':-3,'♝':-3,'♛':-9,'♚':-100};
+const terminal = document.getElementById('terminal');
+let history = [], historyIndex=-1;
+
+function applyTheme(name,bg,text){
+  if(name==='solid color'){ document.body.style.backgroundColor=bg; document.body.style.color=text; } else { document.body.style.backgroundColor='#000'; document.body.style.color='#39FF14'; }
+  currentTheme = name;
+  localStorage.setItem('theme', currentTheme);
+  updatePrompt();
+}
+
+function updatePrompt(){
+  const promptSpans = document.querySelectorAll('.prompt');
+  promptSpans.forEach(p=>{ p.textContent = 'user@'+(openGame||currentTheme)+':~$'; });
+}
 
 function createInputLine(){
-    const line=document.createElement('div');
-    line.className='input-line';
-    const prompt=document.createElement('span');
-    prompt.className='prompt';
-    prompt.textContent='user@homebrew:~$';
-    const input=document.createElement('input');
-    input.type='text';
-    line.appendChild(prompt);
-    line.appendChild(input);
-    terminal.appendChild(line);
-    input.focus();
-
-    input.addEventListener('keydown', e=>handleKeyDown(e,input));
+  const line = document.createElement('div'); line.className='input-line';
+  const p = document.createElement('span'); p.className='prompt'; p.textContent='user@'+(openGame||currentTheme)+':~$';
+  const inp = document.createElement('input'); inp.type='text'; inp.autocomplete='off';
+  line.appendChild(p); line.appendChild(inp); terminal.appendChild(line); inp.focus();
+  inp.addEventListener('keydown', e=>handleKey(e, inp));
+  scrollToBottom();
 }
 
-function handleKeyDown(e,input){
-    if(e.key==='Enter'){
-        const cmd=input.value.trim();
-        addPromptLine(cmd);
-        if(cmd){ history.push(cmd); historyIndex=-1; processCommand(cmd); }
-        input.disabled=true;
-        createInputLine();
-    } else if(e.key==='ArrowUp'){ if(history.length>0){ historyIndex=(historyIndex<=0)?history.length-1:historyIndex-1; input.value=history[historyIndex]; } e.preventDefault(); }
-    else if(e.key==='ArrowDown'){ if(history.length>0){ historyIndex=(historyIndex>=history.length-1)?0:historyIndex+1; input.value=history[historyIndex]; } e.preventDefault(); }
-}
+function addPrompt(cmd){ const d=document.createElement('div'); d.className='output-line'; d.innerHTML=`<span class="prompt">user@${openGame||currentTheme}:~$</span> ${cmd}`; terminal.appendChild(d); scrollToBottom(); }
+function addOutput(text){ const d=document.createElement('div'); d.className='output-line'; d.textContent=text; terminal.appendChild(d); scrollToBottom(); }
+function scrollToBottom(){ terminal.scrollTop = terminal.scrollHeight; }
+function handleKey(e,inp){ if(e.key==='Enter'){ const v=inp.value.trim(); addPrompt(v); if(v){ history.push(v); historyIndex=-1; processCommand(v); } inp.disabled=true; createInputLine(); } else if(e.key==='ArrowUp'){ if(history.length>0){ historyIndex=(historyIndex<=0)?history.length-1:historyIndex-1; inp.value=history[historyIndex]; } e.preventDefault(); } else if(e.key==='ArrowDown'){ if(history.length>0){ historyIndex=(historyIndex>=history.length-1)?0:historyIndex+1; inp.value=history[historyIndex]; } e.preventDefault(); } }
 
-function addPromptLine(cmd){ const div=document.createElement('div'); div.className='output-line'; div.innerHTML=`<span class="prompt">user@homebrew:~$</span> ${cmd}`; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
-function addOutputLine(text){ const div=document.createElement('div'); div.className='output-line'; div.textContent=text; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
-
+// --- Commands ---
 function processCommand(cmd){
-    const tokens=cmd.split(' ');
-    if(tokens[0]==='help'){ addOutputLine('Available commands: help, about, game'); return; }
-    if(tokens[0]==='about'){ addOutputLine('This is a homebrew terminal-style website with neon green text!'); return; }
-    if(tokens[0]==='game'){
-        if(tokens.length<2){ addOutputLine('Usage: game [maze|minesweeper|chess]'); return; }
-        switch(tokens[1]){
-            case 'maze': window.location.href='https://matip47.github.io/games/maze'; break;
-            case 'minesweeper': addOutputLine('Minesweeper launched!'); break;
-            case 'chess': launchChess(); break;
-            default: addOutputLine('Unknown game'); return;
-        }
-        return;
+  const tokens = cmd.split(/\s+/);
+  if(tokens[0]==='help'){ addOutput('Available commands: help, about, game, theme'); return; }
+  if(tokens[0]==='about'){ addOutput('Homebrew terminal — neon green'); return; }
+  if(tokens[0]==='theme'){ applyThemeCommand(tokens); return; }
+  if(tokens[0]==='game'){
+    if(tokens.length<2){ addOutput('Usage: game [maze|minesweeper|chess]'); return; }
+    if(tokens[1]==='quit'){
+      if(openGame){ openGame=null; gameState=null; updatePrompt(); addOutput('Game closed.'); localStorage.removeItem('lastGame'); localStorage.removeItem('gameState'); }
+      else addOutput('No game is open, Start one with the "game" command');
+      return;
     }
-    if(chessGame && tokens.length===2){ moveChess(tokens[0],tokens[1]); return; }
-    addOutputLine('Unknown command.');
+    if(tokens[1]==='maze'){ addOutput('Redirecting to maze...'); setTimeout(()=>window.location.href='https://matip47.github.io/games/maze',200); return; }
+    if(openGame){ addOutput('Closing previous game: '+openGame); }
+    openGame=tokens[1];
+    localStorage.setItem('lastGame',JSON.stringify({game:openGame,time:Date.now()}));
+    updatePrompt();
+    if(openGame==='chess'){ launchChess(); }
+    if(openGame==='minesweeper'){ const diff = tokens[2]||'easy'; launchMinesweeper(diff); }
+    return;
+  }
+  if(openGame==='chess'){ processChessMove(cmd); return; }
+  addOutput('Unknown command');
 }
 
-function launchChess(){
-    chessGame={
-        board:[
-            ['♜','♞','♝','♛','♚','♝','♞','♜'],
-            ['♟','♟','♟','♟','♟','♟','♟','♟'],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            ['♙','♙','♙','♙','♙','♙','♙','♙'],
-            ['♖','♘','♗','♕','♔','♗','♘','♖']
-        ],
-        turn:'white',
-        aiMoved:false
-    };
-    renderChess();
-    addOutputLine('Chess launched! Type moves like e2 e4');
+// --- Theme Command ---
+const themes = {basic:['#000','#39FF14'], dark:['#111','#39FF14'], light:['#fff','#000'], grass:['#0f0','#030'], homebrew:['#000','#39FF14'], manpage:['#000','#0ff'], novel:['#fdf6e3','#657b83'], ocean:['#001f3f','#7fffd4'], pro:['#0d0d0d','#00ffcc'], 'red sands':['#7f3f00','#ff0'], 'silver aerogel':['#eee','#666']};
+function applyThemeCommand(tokens){
+  if(tokens[1]==='solid' && tokens[2]==='color' && tokens[3] && tokens[4]){ applyTheme('solid color',tokens[3],tokens[4]); }
+  else if(themes[tokens[1]]){ applyTheme(tokens[1],themes[tokens[1]][0],themes[tokens[1]][1]); }
+  else addOutput('Unknown theme');
 }
 
-function renderChess(){
-    const div=document.createElement('div');
-    div.className='chess-board';
+// --- Restore last game prompt ---
+window.addEventListener('load',()=>{
+  const lastGame = JSON.parse(localStorage.getItem('lastGame'));
+  if(lastGame && lastGame.game!=='maze'){
+    const d = new Date(lastGame.time);
+    const dateStr = d.toLocaleDateString(); const timeStr = d.toLocaleTimeString();
+    const yes = confirm(`Do you want to open your last game of ${lastGame.game} at ${timeStr} on ${dateStr}?`);
+    if(yes){ openGame=lastGame.game; updatePrompt();
+      if(openGame==='chess'){ launchChess(); }
+      if(openGame==='minesweeper'){ const state = JSON.parse(localStorage.getItem('gameState')); if(state) launchMinesweeper(state.difficulty,state); else launchMinesweeper('easy'); }
+    } else{ localStorage.removeItem('lastGame'); localStorage.removeItem('gameState'); }
+  }
+});
 
-    for(let r=0;r<8;r++){
-        const rowDiv=document.createElement('div');
-        rowDiv.className='chess-row';
-        const labelDiv=document.createElement('div');
-        labelDiv.className='chess-label';
-        labelDiv.textContent=rowToRank[r];
-        rowDiv.appendChild(labelDiv);
-        for(let c=0;c<8;c++){
-            const cellDiv=document.createElement('div');
-            cellDiv.className='chess-cell';
-            cellDiv.textContent=chessGame.board[r][c];
-            rowDiv.appendChild(cellDiv);
-        }
-        div.appendChild(rowDiv);
-    }
-    const bottomRow=document.createElement('div');
-    bottomRow.className='chess-row';
-    const emptyLabel=document.createElement('div');
-    emptyLabel.className='chess-label'; bottomRow.appendChild(emptyLabel);
-    colToFile.forEach(f=>{ const l=document.createElement('div'); l.className='chess-cell'; l.textContent=f; bottomRow.appendChild(l); });
-    div.appendChild(bottomRow);
+// --- Chess placeholder (click-to-move, AI, state persistence) ---
+function launchChess(){ addOutput('Chess launched! Click or type moves like e2 e4'); gameState={type:'chess',board:null,turn:'w'}; localStorage.setItem('gameState',JSON.stringify(gameState)); }
+function processChessMove(cmd){ addOutput('Processing chess move: '+cmd); }
 
-    terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight;
+// --- Minesweeper placeholder with difficulties ---
+function launchMinesweeper(difficulty,state){
+  if(!state) state={type:'minesweeper',difficulty:difficulty,board:[]};
+  gameState=state; localStorage.setItem('gameState',JSON.stringify(gameState));
+  addOutput('Minesweeper launched: '+difficulty);
 }
 
-function moveChess(from,to){
-    const fr=rankToRow[from[1]], fc=fileToCol[from[0]];
-    const tr=rankToRow[to[1]], tc=fileToCol[to[0]];
-    const piece=chessGame.board[fr][fc];
-    if(piece===' '){ addOutputLine('No piece at '+from); return; }
-    if(!isLegalMove(piece,fr,fc,tr,tc)){ addOutputLine('Illegal move'); return; }
-    chessGame.board[tr][tc]=piece;
-    chessGame.board[fr][fc]=' ';
-    renderChess();
-    chessGame.turn='black';
-    chessGame.aiMoved=false;
-    addOutputLine(`Moved ${from} to ${to}`);
-    setTimeout(()=>{ aiMove(); },300);
-}
-
-function isLegalMove(piece,fr,fc,tr,tc){
-    // Simple check: cannot capture same color
-    const target=chessGame.board[tr][tc];
-    return !isSameColor(piece,target);
-}
-
-function aiMove(){
-    if(!chessGame || chessGame.turn!=='black' || chessGame.aiMoved) return;
-    const moves=getAllLegalMoves('black');
-    if(moves.length===0){ addOutputLine('Black has no legal moves'); return; }
-    let bestScore=-Infinity, bestMove=null;
-    moves.forEach(m=>{
-        const copy=chessGame.board.map(r=>r.slice());
-        const piece=copy[rankToRow[m.from[1]]][fileToCol[m.from[0]]];
-        copy[rankToRow[m.to[1]]][fileToCol[m.to[0]]]=piece;
-        copy[rankToRow[m.from[1]]][fileToCol[m.from[0]]]=' ';
-        const score=evaluateBoard(copy);
-        if(score>bestScore){ bestScore=score; bestMove=m; }
-    });
-    if(bestMove){
-        chessGame.aiMoved=true;
-        moveChess(bestMove.from,bestMove.to);
-        chessGame.turn='white';
-    }
-}
-
-function evaluateBoard(board){ let score=0; for(let r=0;r<8;r++){ for(let c=0;c<8;c++){ const p=board[r][c]; if(pieceValues[p]) score+=pieceValues[p]; } } return score; }
-function getAllLegalMoves(color){ const moves=[]; for(let r=0;r<8;r++){ for(let c=0;c<8;c++){ const p=chessGame.board[r][c]; if(color==='black' && !p.match(/[♟♜♞♝♛♚]/)) continue; if(color==='white' && !p.match(/[♙♖♘♗♕♔]/)) continue; const dr=[-1,0,1], dc=[-1,0,1]; dr.forEach(dri=>{ dc.forEach(dci=>{ const nr=r+dri,nc=c+dci; if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(target===' ' || !isSameColor(p,target)) moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); } }); }); } } return moves; }
-
-function frcToAlg(r,c){ return colToFile[c]+rowToRank[r]; }
-function isSameColor(p1,p2){ if(p1===' '||p2===' ') return false; return (/[♙♖♘♗♕♔]/.test(p1) && /[♙♖♘♗♕♔]/.test(p2)) || (/[♟♜♞♝♛♚]/.test(p1) && /[♟♜♞♝♛♚]/.test(p2)); }
-
+applyTheme(currentTheme,themes[currentTheme]?[themes[currentTheme][0]:'#000'],themes[currentTheme]?[themes[currentTheme][1]:'#39FF14']);
 createInputLine();
 </script>
 </body>
