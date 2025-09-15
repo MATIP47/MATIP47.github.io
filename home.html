@@ -19,6 +19,7 @@ input { background:none; border:none; color:#39FF14; outline:none; font:inherit;
 .chess-board { display:inline-block; border:2px solid #39FF14; margin:8px 0; }
 .chess-row { display:flex; }
 .chess-cell { width:32px; height:32px; text-align:center; line-height:32px; color:#39FF14; border:1px solid #39FF14; box-sizing:border-box; }
+.chess-label { width:32px; text-align:center; color:#39FF14; }
 </style>
 </head>
 <body>
@@ -30,7 +31,6 @@ const COMMANDS=[{cmd:'game', sub:['maze','minesweeper','chess']},{cmd:'about'}];
 let history=[], historyIndex=-1;
 const terminal=document.getElementById('terminal');
 
-// Chess state
 let chessGame=null;
 const fileToCol={a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7};
 const rankToRow={'1':7,'2':6,'3':5,'4':4,'5':3,'6':2,'7':1,'8':0};
@@ -38,7 +38,6 @@ const colToFile=['a','b','c','d','e','f','g','h'];
 const rowToRank=['8','7','6','5','4','3','2','1'];
 const pieceValues = {'♙':1,'♖':5,'♘':3,'♗':3,'♕':9,'♔':100,'♟':-1,'♜':-5,'♞':-3,'♝':-3,'♛':-9,'♚':-100};
 
-// Terminal input
 function createInputLine(){
     const line=document.createElement('div');
     line.className='input-line';
@@ -69,7 +68,6 @@ function handleKeyDown(e,input){
 function addPromptLine(cmd){ const div=document.createElement('div'); div.className='output-line'; div.innerHTML=`<span class="prompt">user@homebrew:~$</span> ${cmd}`; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
 function addOutputLine(text){ const div=document.createElement('div'); div.className='output-line'; div.textContent=text; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
 
-// Command Processor
 function processCommand(cmd){
     const tokens=cmd.split(' ');
     if(tokens[0]==='help'){ addOutputLine('Available commands: help, about, game'); return; }
@@ -88,7 +86,6 @@ function processCommand(cmd){
     addOutputLine('Unknown command.');
 }
 
-// Chess with improved AI
 function launchChess(){
     chessGame={
         board:[
@@ -111,19 +108,30 @@ function launchChess(){
 function renderChess(){
     const div=document.createElement('div');
     div.className='chess-board';
-    chessGame.board.forEach(row=>{
+
+    for(let r=0;r<8;r++){
         const rowDiv=document.createElement('div');
         rowDiv.className='chess-row';
-        row.forEach(cell=>{
+        const labelDiv=document.createElement('div');
+        labelDiv.className='chess-label';
+        labelDiv.textContent=rowToRank[r];
+        rowDiv.appendChild(labelDiv);
+        for(let c=0;c<8;c++){
             const cellDiv=document.createElement('div');
             cellDiv.className='chess-cell';
-            cellDiv.textContent=cell;
+            cellDiv.textContent=chessGame.board[r][c];
             rowDiv.appendChild(cellDiv);
-        });
+        }
         div.appendChild(rowDiv);
-    });
-    terminal.appendChild(div);
-    terminal.scrollTop=terminal.scrollHeight;
+    }
+    const bottomRow=document.createElement('div');
+    bottomRow.className='chess-row';
+    const emptyLabel=document.createElement('div');
+    emptyLabel.className='chess-label'; bottomRow.appendChild(emptyLabel);
+    colToFile.forEach(f=>{ const l=document.createElement('div'); l.className='chess-cell'; l.textContent=f; bottomRow.appendChild(l); });
+    div.appendChild(bottomRow);
+
+    terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight;
 }
 
 function moveChess(from,to){
@@ -131,8 +139,7 @@ function moveChess(from,to){
     const tr=rankToRow[to[1]], tc=fileToCol[to[0]];
     const piece=chessGame.board[fr][fc];
     if(piece===' '){ addOutputLine('No piece at '+from); return; }
-    const target=chessGame.board[tr][tc];
-    if(isSameColor(piece,target)) { addOutputLine('Invalid move'); return; }
+    if(!isLegalMove(piece,fr,fc,tr,tc)){ addOutputLine('Illegal move'); return; }
     chessGame.board[tr][tc]=piece;
     chessGame.board[fr][fc]=' ';
     renderChess();
@@ -140,6 +147,12 @@ function moveChess(from,to){
     chessGame.aiMoved=false;
     addOutputLine(`Moved ${from} to ${to}`);
     setTimeout(()=>{ aiMove(); },300);
+}
+
+function isLegalMove(piece,fr,fc,tr,tc){
+    // Simple check: cannot capture same color
+    const target=chessGame.board[tr][tc];
+    return !isSameColor(piece,target);
 }
 
 function aiMove(){
@@ -162,28 +175,8 @@ function aiMove(){
     }
 }
 
-function evaluateBoard(board){
-    let score=0;
-    for(let r=0;r<8;r++){ for(let c=0;c<8;c++){ const p=board[r][c]; if(pieceValues[p]) score+=pieceValues[p]; } }
-    return score;
-}
-
-function getAllLegalMoves(color){
-    const moves=[];
-    for(let r=0;r<8;r++){
-        for(let c=0;c<8;c++){
-            const p=chessGame.board[r][c];
-            if(color==='black' && !p.match(/[♟♜♞♝♛♚]/)) continue;
-            if(color==='white' && !p.match(/[♙♖♘♗♕♔]/)) continue;
-            const dr=[-1,0,1], dc=[-1,0,1];
-            dr.forEach(dri=>{ dc.forEach(dci=>{
-                const nr=r+dri,nc=c+dci;
-                if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(target===' ' || !isSameColor(p,target)) moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); }
-            }); });
-        }
-    }
-    return moves;
-}
+function evaluateBoard(board){ let score=0; for(let r=0;r<8;r++){ for(let c=0;c<8;c++){ const p=board[r][c]; if(pieceValues[p]) score+=pieceValues[p]; } } return score; }
+function getAllLegalMoves(color){ const moves=[]; for(let r=0;r<8;r++){ for(let c=0;c<8;c++){ const p=chessGame.board[r][c]; if(color==='black' && !p.match(/[♟♜♞♝♛♚]/)) continue; if(color==='white' && !p.match(/[♙♖♘♗♕♔]/)) continue; const dr=[-1,0,1], dc=[-1,0,1]; dr.forEach(dri=>{ dc.forEach(dci=>{ const nr=r+dri,nc=c+dci; if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(target===' ' || !isSameColor(p,target)) moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); } }); }); } } return moves; }
 
 function frcToAlg(r,c){ return colToFile[c]+rowToRank[r]; }
 function isSameColor(p1,p2){ if(p1===' '||p2===' ') return false; return (/[♙♖♘♗♕♔]/.test(p1) && /[♙♖♘♗♕♔]/.test(p2)) || (/[♟♜♞♝♛♚]/.test(p1) && /[♟♜♞♝♛♚]/.test(p2)); }
