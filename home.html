@@ -10,17 +10,12 @@ body { margin:0; padding:0; background:#000; color:#39FF14; font-family:'Press S
 #terminal-container { width:90vw; max-width:900px; margin:20px auto; padding:10px; background:#111; border-radius:8px; display:flex; flex-direction:column; }
 #terminal { flex:1; overflow-y:auto; height:60vh; }
 .output-line { white-space:pre-wrap; }
-.prompt-line { display:flex; align-items:center; }
+.input-line { display:flex; align-items:center; margin-top:2px; }
 .prompt { margin-right:6px; }
-#input-line { flex:1; background:none; border:none; color:#39FF14; outline:none; font:inherit; }
-#autocomplete-dropdown { position:absolute; background:#111; border:1px solid #39FF14; display:none; flex-direction:column; z-index:10; }
-#autocomplete-dropdown .item { padding:4px 8px; cursor:pointer; }
-#autocomplete-dropdown .item.selected { background:#39FF14; color:#000; }
-.minesweeper-board { display:inline-block; margin:8px 0; }
-.minesweeper-row { display:flex; }
-.minesweeper-cell { width:24px; height:24px; text-align:center; line-height:24px; border:1px solid #333; background:#232323; color:#fff; cursor:pointer; user-select:none; }
-.minesweeper-cell.revealed { background:#282828; color:#7fd; cursor:default; }
-.minesweeper-cell.mine { color:#f33; }
+input { background:none; border:none; color:#39FF14; outline:none; font:inherit; flex:1; }
+.dropdown { position:absolute; background:#111; border:1px solid #39FF14; display:none; flex-direction:column; z-index:10; }
+.dropdown-item { padding:4px 8px; cursor:pointer; }
+.dropdown-item.active { background:#39FF14; color:#000; }
 .chess-board { display:inline-block; border:2px solid #444; margin:8px 0; }
 .chess-row { display:flex; }
 .chess-cell { width:32px; height:32px; text-align:center; line-height:32px; }
@@ -29,49 +24,139 @@ body { margin:0; padding:0; background:#000; color:#39FF14; font-family:'Press S
 <body>
 <div id="terminal-container">
   <div id="terminal"></div>
-  <div style="position:relative;">
-    <div class="prompt-line">
-      <span class="prompt">&gt;</span>
-      <input id="input-line" autocomplete="off" autofocus spellcheck="false">
-    </div>
-    <div id="autocomplete-dropdown"></div>
-  </div>
 </div>
 <script>
 const COMMANDS=[{cmd:'/game', sub:['maze','minesweeper','chess']},{cmd:'about'}];
-let history=[],historyIndex=-1,autocompleteItems=[],autocompleteIndex=0,autocompleteActive=false;
+let history=[], historyIndex=-1;
 const terminal=document.getElementById('terminal');
-const inputLine=document.getElementById('input-line');
-const autocompleteDropdown=document.getElementById('autocomplete-dropdown');
 
-function addOutputLine(html){console.log('Adding output line:', html); const div=document.createElement('div');div.className='output-line';div.innerHTML=html;terminal.appendChild(div);terminal.scrollTop=terminal.scrollHeight;}
-function addPromptLine(cmd){console.log('Adding prompt line:', cmd); const div=document.createElement('div');div.className='output-line';div.innerHTML=`<span class="prompt">&gt;</span> ${cmd}`;terminal.appendChild(div);terminal.scrollTop=terminal.scrollHeight;}
-function getAutocompleteOptions(prefix){console.log('Getting autocomplete options for prefix:', prefix); const tokens=prefix.trim().split(/\s+/);if(tokens.length===1){ const result=COMMANDS.map(c=>c.cmd).filter(cmd=>cmd.startsWith(tokens[0])); console.log('Autocomplete results:', result); return result;} const cmdObj=COMMANDS.find(c=>c.cmd===tokens[0]);if(cmdObj&&cmdObj.sub&&tokens.length===2){ const result=cmdObj.sub.filter(sub=>sub.startsWith(tokens[1])); console.log('Autocomplete sub-command results:', result); return result;} return []}
-function showAutocomplete(prefix){console.log('Showing autocomplete for prefix:', prefix); autocompleteItems=getAutocompleteOptions(prefix);if(autocompleteItems.length===0){console.log('No matches, hiding dropdown'); autocompleteDropdown.style.display='none';autocompleteActive=false;return;}autocompleteDropdown.innerHTML=autocompleteItems.map((item,idx)=>`<div class="item${idx===autocompleteIndex?' selected':''}">${item}</div>`).join('');const rect=inputLine.getBoundingClientRect();autocompleteDropdown.style.left=rect.left+'px';autocompleteDropdown.style.top=(rect.bottom+window.scrollY)+'px';autocompleteDropdown.style.display='flex';autocompleteActive=true; console.log('Dropdown displayed with items:', autocompleteItems);}
-function hideAutocomplete(){console.log('Hiding autocomplete dropdown'); autocompleteDropdown.style.display='none';autocompleteActive=false;}
-function selectAutocomplete(selected){console.log('Selected autocomplete item:', selected); const tokens=inputLine.value.trim().split(/\s+/);inputLine.value=tokens.length===1?selected+' ':tokens[0]+' '+selected+' ';hideAutocomplete();inputLine.focus();}
-autocompleteDropdown.addEventListener('mousedown',e=>{if(e.target.classList.contains('item')){console.log('Dropdown item clicked:', e.target.innerText); selectAutocomplete(e.target.innerText); e.preventDefault();}});
-inputLine.addEventListener('keydown',function(e){console.log('Keydown event:', e.key); if(e.key==='ArrowUp'){if(history.length>0){if(historyIndex===-1)historyIndex=history.length;historyIndex=Math.max(0,historyIndex-1); inputLine.value=history[historyIndex];}hideAutocomplete();e.preventDefault();return;} if(e.key==='ArrowDown'){if(history.length>0&&historyIndex!==-1){historyIndex=Math.min(history.length-1,historyIndex+1); inputLine.value=history[historyIndex];}hideAutocomplete();e.preventDefault();return;} if(e.key==='Tab'){console.log('Tab pressed'); if(!autocompleteActive){showAutocomplete(inputLine,autocompleteDropdown); autocompleteIndex=0;}else{autocompleteIndex=(e.shiftKey?(autocompleteIndex-1+autocompleteItems.length)%autocompleteItems.length:(autocompleteIndex+1)%autocompleteItems.length);showAutocomplete(inputLine,autocompleteDropdown);} e.preventDefault();return;} if(e.key==='Escape'){hideAutocomplete(); e.preventDefault();return;} if(e.key==='Enter'){console.log('Enter pressed, value:', inputLine.value); if(autocompleteActive&&autocompleteItems.length>0){selectAutocomplete(autocompleteItems[autocompleteIndex]); e.preventDefault();return;} const cmd=inputLine.value.trim(); if(cmd){console.log('Processing command:', cmd); addPromptLine(cmd); history.push(cmd); historyIndex=-1; inputLine.value=''; hideAutocomplete(); processCommand(cmd);} e.preventDefault();return;}});
-inputLine.addEventListener('input',()=>{console.log('Input event, value:', inputLine.value); hideAutocomplete();});
-document.addEventListener('click',e=>{console.log('Document click event'); if(!autocompleteDropdown.contains(e.target)) hideAutocomplete(); inputLine.focus();});
+// Chess state
+let chessGame=null;
+const fileToCol={a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7};
+const rankToRow={'1':7,'2':6,'3':5,'4':4,'5':3,'6':2,'7':1,'8':0};
+const colToFile=['a','b','c','d','e','f','g','h'];
+const rowToRank=['8','7','6','5','4','3','2','1'];
 
-// ===== Command Processor =====
-let minesweeper=null; let chessGame=null;
-function processCommand(cmd){console.log('processCommand called with:', cmd); const tokens=cmd.trim().split(/\s+/);
-if(tokens[0]==='/game'){
-  console.log('Detected /game command');
-  if(tokens.length<2){addOutputLine('Usage: /game [maze|minesweeper|chess]');return;}
-  switch(tokens[1]){
-    case 'maze': addOutputLine('Redirecting to maze...'); setTimeout(()=>{console.log('Redirecting to maze URL'); window.location.href='https://matip47.github.io/games/maze';},300); break;
-    case 'minesweeper': console.log('Launching Minesweeper'); launchMinesweeper(); break;
-    case 'chess': console.log('Launching Chess'); launchChess(); break;
-    default: addOutputLine('Unknown game: '+tokens[1]); return;
-  }
-  return;
+function createInputLine(){
+    const line=document.createElement('div');
+    line.className='input-line';
+    const prompt=document.createElement('span');
+    prompt.className='prompt';
+    prompt.textContent='user@homebrew:~$';
+    const input=document.createElement('input');
+    input.type='text';
+    line.appendChild(prompt);
+    line.appendChild(input);
+    terminal.appendChild(line);
+    input.focus();
+
+    input.addEventListener('keydown', e=>handleKeyDown(e,input));
 }
-if(tokens[0]==='about'){addOutputLine('This is a homebrew terminal-style website with neon green text!'); console.log('Displayed about info'); return;}
-if(chessGame && tokens.length===2){console.log('Moving chess piece:', tokens[0], 'to', tokens[1]); moveChess(tokens[0],tokens[1]); return;}
-addOutputLine('Unknown command. Try /game [maze|minesweeper|chess] or about'); console.log('Command not found');}
+
+function handleKeyDown(e,input){
+    if(e.key==='Enter'){
+        const cmd=input.value.trim();
+        addPromptLine(cmd);
+        if(cmd){ history.push(cmd); historyIndex=-1; processCommand(cmd); }
+        input.disabled=true;
+        createInputLine();
+    } else if(e.key==='ArrowUp'){ if(history.length>0){ historyIndex=(historyIndex<=0)?history.length-1:historyIndex-1; input.value=history[historyIndex]; } e.preventDefault(); }
+    else if(e.key==='ArrowDown'){ if(history.length>0){ historyIndex=(historyIndex>=history.length-1)?0:historyIndex+1; input.value=history[historyIndex]; } e.preventDefault(); }
+}
+
+function addPromptLine(cmd){ const div=document.createElement('div'); div.className='output-line'; div.innerHTML=`<span class="prompt">user@homebrew:~$</span> ${cmd}`; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
+function addOutputLine(text){ const div=document.createElement('div'); div.className='output-line'; div.textContent=text; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
+
+function processCommand(cmd){
+    const tokens=cmd.split(' ');
+    if(tokens[0]==='help'){ addOutputLine('Available commands: help, about, /game'); return; }
+    if(tokens[0]==='about'){ addOutputLine('This is a homebrew terminal-style website with neon green text!'); return; }
+    if(tokens[0]==='/game'){
+        if(tokens.length<2){ addOutputLine('Usage: /game [maze|minesweeper|chess]'); return; }
+        switch(tokens[1]){
+            case 'maze': window.location.href='https://matip47.github.io/games/maze'; break;
+            case 'minesweeper': addOutputLine('Minesweeper launched!'); break;
+            case 'chess': launchChess(); break;
+            default: addOutputLine('Unknown game'); return;
+        }
+        return;
+    }
+    if(chessGame && tokens.length===2){ moveChess(tokens[0],tokens[1]); return; }
+    addOutputLine('Unknown command.');
+}
+
+// ===== Chess with simple AI =====
+function launchChess(){
+    chessGame={
+        board:[
+            ['♜','♞','♝','♛','♚','♝','♞','♜'],
+            ['♟','♟','♟','♟','♟','♟','♟','♟'],
+            [' ',' ',' ',' ',' ',' ',' ',' '],
+            [' ',' ',' ',' ',' ',' ',' ',' '],
+            [' ',' ',' ',' ',' ',' ',' ',' '],
+            [' ',' ',' ',' ',' ',' ',' ',' '],
+            ['♙','♙','♙','♙','♙','♙','♙','♙'],
+            ['♖','♘','♗','♕','♔','♗','♘','♖']
+        ],
+        turn:'white'
+    };
+    renderChess();
+    addOutputLine('Chess launched! Type moves like e2 e4');
+}
+
+function renderChess(){
+    const div=document.createElement('div');
+    div.className='chess-board';
+    chessGame.board.forEach(row=>{
+        const rowDiv=document.createElement('div');
+        rowDiv.className='chess-row';
+        row.forEach(cell=>{ const cellDiv=document.createElement('div'); cellDiv.className='chess-cell'; cellDiv.textContent=cell; rowDiv.appendChild(cellDiv); });
+        div.appendChild(rowDiv);
+    });
+    terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight;
+}
+
+function moveChess(from,to){
+    // Convert from/to to row/col
+    const fr=rankToRow[from[1]], fc=fileToCol[from[0]];
+    const tr=rankToRow[to[1]], tc=fileToCol[to[0]];
+    const piece=chessGame.board[fr][fc];
+    if(piece===' '){ addOutputLine('No piece at '+from); return; }
+    const target=chessGame.board[tr][tc];
+    // Basic move: cannot capture own piece
+    if(piece.match(/[♙♖♘♗♕♔]/) && target.match(/[♙♖♘♗♕♔]/)) { addOutputLine('Invalid move'); return; }
+    if(piece.match(/[♟♜♞♝♛♚]/) && target.match(/[♟♜♞♝♛♚]/)) { addOutputLine('Invalid move'); return; }
+    // Make move
+    chessGame.board[tr][tc]=piece;
+    chessGame.board[fr][fc]=' ';
+    renderChess();
+    chessGame.turn = chessGame.turn==='white'?'black':'white';
+    addOutputLine(`Moved ${from} to ${to}`);
+    setTimeout(chessAI,300);
+}
+
+function chessAI(){
+    if(!chessGame || chessGame.turn!=='black') return;
+    // Very simple AI: random move
+    const moves=[];
+    for(let r=0;r<8;r++){
+        for(let c=0;c<8;c++){
+            const piece=chessGame.board[r][c];
+            if(piece.match(/[♟♜♞♝♛♚]/)){
+                const dr=[-1,0,1], dc=[-1,0,1];
+                dr.forEach(dri=>{ dc.forEach(dci=>{ const nr=r+dri, nc=c+dci;
+                    if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(!target.match(/[♟♜♞♝♛♚]/)){ moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); } } }); });
+            }
+        }
+    }
+    if(moves.length===0){ addOutputLine('Black has no legal moves'); return; }
+    const move=moves[Math.floor(Math.random()*moves.length)];
+    moveChess(move.from,move.to);
+}
+
+function frcToAlg(r,c){ return colToFile[c]+rowToRank[r]; }
+
+createInputLine();
 </script>
 </body>
 </html>
