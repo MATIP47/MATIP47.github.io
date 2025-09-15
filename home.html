@@ -7,20 +7,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
 body { margin:0; padding:0; background:#000; color:#39FF14; font-family:'Press Start 2P', monospace; }
-#terminal-container { width:90vw; max-width:900px; margin:20px auto; padding:10px; background:#000; border-radius:8px; display:flex; flex-direction:column; align-items:flex-start; }
-#terminal { flex:1; overflow-y:auto; height:60vh; background:#000; color:#39FF14; width:100%; text-align:left; }
-.output-line { white-space:pre-wrap; color:#39FF14; text-align:left; }
+#terminal-container { width:95vw; max-width:1200px; margin:10px auto; padding:10px; background:#000; border-radius:8px; display:flex; flex-direction:column; }
+#terminal { flex:1; overflow-y:auto; min-height:60vh; background:#000; color:#39FF14; width:100%; text-align:left; }
+.output-line { white-space:pre-wrap; color:#39FF14; text-align:left; width:100%; }
 .input-line { display:flex; align-items:center; margin-top:2px; width:100%; }
 .prompt { margin-right:6px; color:#39FF14; }
-input { background:none; border:none; color:#39FF14; outline:none; font:inherit; flex:1; }
+input { background:none; border:none; color:#39FF14; outline:none; font:inherit; flex:1; width:100%; }
 .dropdown { position:absolute; background:#000; border:1px solid #39FF14; display:none; flex-direction:column; z-index:10; color:#39FF14; }
 .dropdown-item { padding:4px 8px; cursor:pointer; }
 .dropdown-item.active { background:#39FF14; color:#000; }
-.minesweeper-board { display:inline-block; margin:8px 0; }
-.minesweeper-row { display:flex; }
-.minesweeper-cell { width:24px; height:24px; text-align:center; line-height:24px; border:1px solid #39FF14; background:#000; color:#39FF14; cursor:pointer; user-select:none; }
-.minesweeper-cell.revealed { background:#111; color:#7fd; cursor:default; }
-.minesweeper-cell.mine { color:#f33; }
 .chess-board { display:inline-block; border:2px solid #39FF14; margin:8px 0; }
 .chess-row { display:flex; }
 .chess-cell { width:32px; height:32px; text-align:center; line-height:32px; color:#39FF14; border:1px solid #39FF14; box-sizing:border-box; }
@@ -107,7 +102,7 @@ function launchChess(){
             ['♖','♘','♗','♕','♔','♗','♘','♖']
         ],
         turn:'white',
-        lastAIMove:null
+        aiMoved:false
     };
     renderChess();
     addOutputLine('Chess launched! Type moves like e2 e4');
@@ -142,13 +137,14 @@ function moveChess(from,to){
     chessGame.board[fr][fc]=' ';
     renderChess();
     chessGame.turn='black';
+    chessGame.aiMoved=false;
     addOutputLine(`Moved ${from} to ${to}`);
     setTimeout(()=>{ aiMove(); },300);
 }
 
 function aiMove(){
-    if(!chessGame || chessGame.turn!=='black') return;
-    const moves=getAllLegalMoves('black').filter(m=>m.from!==chessGame.lastAIMove);
+    if(!chessGame || chessGame.turn!=='black' || chessGame.aiMoved) return;
+    const moves=getAllLegalMoves('black');
     if(moves.length===0){ addOutputLine('Black has no legal moves'); return; }
     let bestScore=-Infinity, bestMove=null;
     moves.forEach(m=>{
@@ -160,8 +156,9 @@ function aiMove(){
         if(score>bestScore){ bestScore=score; bestMove=m; }
     });
     if(bestMove){
-        chessGame.lastAIMove=bestMove.from;
+        chessGame.aiMoved=true;
         moveChess(bestMove.from,bestMove.to);
+        chessGame.turn='white';
     }
 }
 
