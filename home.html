@@ -36,6 +36,7 @@ const fileToCol={a:0,b:1,c:2,d:3,e:4,f:5,g:6,h:7};
 const rankToRow={'1':7,'2':6,'3':5,'4':4,'5':3,'6':2,'7':1,'8':0};
 const colToFile=['a','b','c','d','e','f','g','h'];
 const rowToRank=['8','7','6','5','4','3','2','1'];
+const pieceValues = {'♙':1,'♖':5,'♘':3,'♗':3,'♕':9,'♔':100,'♟':-1,'♜':-5,'♞':-3,'♝':-3,'♛':-9,'♚':-100};
 
 function createInputLine(){
     const line=document.createElement('div');
@@ -67,6 +68,7 @@ function handleKeyDown(e,input){
 function addPromptLine(cmd){ const div=document.createElement('div'); div.className='output-line'; div.innerHTML=`<span class="prompt">user@homebrew:~$</span> ${cmd}`; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
 function addOutputLine(text){ const div=document.createElement('div'); div.className='output-line'; div.textContent=text; terminal.appendChild(div); terminal.scrollTop=terminal.scrollHeight; }
 
+// ===== Command Processor =====
 function processCommand(cmd){
     const tokens=cmd.split(' ');
     if(tokens[0]==='help'){ addOutputLine('Available commands: help, about, /game'); return; }
@@ -85,21 +87,18 @@ function processCommand(cmd){
     addOutputLine('Unknown command.');
 }
 
-// ===== Chess with simple AI =====
+// ===== Chess with Minimax AI =====
 function launchChess(){
-    chessGame={
-        board:[
-            ['♜','♞','♝','♛','♚','♝','♞','♜'],
-            ['♟','♟','♟','♟','♟','♟','♟','♟'],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            [' ',' ',' ',' ',' ',' ',' ',' '],
-            ['♙','♙','♙','♙','♙','♙','♙','♙'],
-            ['♖','♘','♗','♕','♔','♗','♘','♖']
-        ],
-        turn:'white'
-    };
+    chessGame={board:[
+        ['♜','♞','♝','♛','♚','♝','♞','♜'],
+        ['♟','♟','♟','♟','♟','♟','♟','♟'],
+        [' ',' ',' ',' ',' ',' ',' ',' '],
+        [' ',' ',' ',' ',' ',' ',' ',' '],
+        [' ',' ',' ',' ',' ',' ',' ',' '],
+        [' ',' ',' ',' ',' ',' ',' ',' '],
+        ['♙','♙','♙','♙','♙','♙','♙','♙'],
+        ['♖','♘','♗','♕','♔','♗','♘','♖']
+    ], turn:'white'};
     renderChess();
     addOutputLine('Chess launched! Type moves like e2 e4');
 }
@@ -117,46 +116,50 @@ function renderChess(){
 }
 
 function moveChess(from,to){
-    // Convert from/to to row/col
     const fr=rankToRow[from[1]], fc=fileToCol[from[0]];
     const tr=rankToRow[to[1]], tc=fileToCol[to[0]];
     const piece=chessGame.board[fr][fc];
     if(piece===' '){ addOutputLine('No piece at '+from); return; }
-    const target=chessGame.board[tr][tc];
-    // Basic move: cannot capture own piece
-    if(piece.match(/[♙♖♘♗♕♔]/) && target.match(/[♙♖♘♗♕♔]/)) { addOutputLine('Invalid move'); return; }
-    if(piece.match(/[♟♜♞♝♛♚]/) && target.match(/[♟♜♞♝♛♚]/)) { addOutputLine('Invalid move'); return; }
-    // Make move
     chessGame.board[tr][tc]=piece;
     chessGame.board[fr][fc]=' ';
     renderChess();
-    chessGame.turn = chessGame.turn==='white'?'black':'white';
+    chessGame.turn='black';
     addOutputLine(`Moved ${from} to ${to}`);
-    setTimeout(chessAI,300);
+    setTimeout(()=>{aiMove();},300);
 }
 
-function chessAI(){
+function aiMove(){
     if(!chessGame || chessGame.turn!=='black') return;
-    // Very simple AI: random move
+    const moves=getAllLegalMoves('black');
+    if(moves.length===0){ addOutputLine('Game over!'); return; }
+    let bestScore=-Infinity, bestMove=null;
+    moves.forEach(m=>{
+        const copy=copyBoard(chessGame.board);
+        const piece=copy[rankToRow[m.from[1]]][fileToCol[m.from[0]]];
+        copy[rankToRow[m.to[1]]][fileToCol[m.to[0]]]=piece;
+        copy[rankToRow[m.from[1]]][fileToCol[m.from[0]]]=' ';
+        const score=evaluateBoard(copy);
+        if(score>bestScore){ bestScore=score; bestMove=m; }
+    });
+    if(bestMove) moveChess(bestMove.from,bestMove.to);
+}
+
+function getAllLegalMoves(color){
     const moves=[];
     for(let r=0;r<8;r++){
         for(let c=0;c<8;c++){
-            const piece=chessGame.board[r][c];
-            if(piece.match(/[♟♜♞♝♛♚]/)){
-                const dr=[-1,0,1], dc=[-1,0,1];
-                dr.forEach(dri=>{ dc.forEach(dci=>{ const nr=r+dri, nc=c+dci;
-                    if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(!target.match(/[♟♜♞♝♛♚]/)){ moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); } } }); });
-            }
+            const p=chessGame.board[r][c];
+            if(color==='black' && !p.match(/[♟♜♞♝♛♚]/)) continue;
+            if(color==='white' && !p.match(/[♙♖♘♗♕♔]/)) continue;
+            const dr=[-1,0,1], dc=[-1,0,1];
+            dr.forEach(dri=>{ dc.forEach(dci=>{
+                const nr=r+dri,nc=c+dci;
+                if(nr>=0&&nr<8&&nc>=0&&nc<8){ const target=chessGame.board[nr][nc]; if(target===' ' || !isSameColor(p,target)) moves.push({from:frcToAlg(r,c),to:frcToAlg(nr,nc)}); }
+            }); });
         }
     }
-    if(moves.length===0){ addOutputLine('Black has no legal moves'); return; }
-    const move=moves[Math.floor(Math.random()*moves.length)];
-    moveChess(move.from,move.to);
+    return moves;
 }
 
-function frcToAlg(r,c){ return colToFile[c]+rowToRank[r]; }
-
-createInputLine();
-</script>
-</body>
-</html>
+function copyBoard(board){ return board.map(r=>r.slice()); }
+function isSameColor(p1,p2){ if(p1===' '||p2===' ') return false; return (/[♙♖♘♗♕♔]/.test
